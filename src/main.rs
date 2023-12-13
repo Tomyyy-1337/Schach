@@ -1,214 +1,212 @@
-fn main() {
+extern crate sdl2;
+
+use schach::Schach;
+use sdl2::mouse::MouseButton;
+use sdl2::pixels::Color;
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use std::time::Duration;
+use sdl2::rect::Rect;
+use sdl2::rect::Point;
+
+pub mod texture_manager;
+pub mod schach;
+
+const SQUARE_SIZE:u32 = 100;
+
+pub fn main() -> Result<(), String> {
     let mut brett = Schach::new();
-    brett.init();
 
-    println!("{:?}", brett.show());
-}
+    let sdl_context = sdl2::init().unwrap();
+    let video_subsystem = sdl_context.video().unwrap();
 
-#[derive(Debug)]
-enum Color {
-    White,
-    Black
-}
+    let window = video_subsystem.window("Schach", SQUARE_SIZE * 8, SQUARE_SIZE * 8)
+        .position_centered()
+        .build()
+        .unwrap();
 
-#[derive(Debug)]
-enum Piece {
-    King,
-    Queen,
-    Rook,
-    Bishop,
-    Knight,
-    Pawn
-}
+    let mut canvas = window.into_canvas().build().unwrap();
 
-#[derive(Debug)]
-struct Schach {
-    black_pawns: u64,
-    white_pawns: u64,
-    black_king:  u64,
-    white_king:  u64,
-    black_queen: u64,
-    white_queen: u64,
-    black_bishops : u64,
-    white_bishops: u64,
-    black_knights: u64,
-    white_knights: u64,
-    black_rooks: u64,
-    white_rooks: u64,
-}
+    let texture_creator: sdl2::render::TextureCreator<sdl2::video::WindowContext> = canvas.texture_creator();
+    let mut tex_man: texture_manager::ResourceManager<'_, String, sdl2::render::Texture<'_>, sdl2::render::TextureCreator<sdl2::video::WindowContext>> = texture_manager::TextureManager::new(&texture_creator);
 
-impl Schach {
-    pub fn new() -> Self {
-        Schach {
-            black_pawns: 0,
-            white_pawns: 0,
-            black_king: 0,
-            white_king: 0,
-            black_queen: 0,
-            white_queen: 0,
-            black_bishops : 0,
-            white_bishops: 0,
-            black_knights: 0,
-            white_knights: 0,
-            black_rooks: 0,
-            white_rooks: 0,
-        }
-    }
+    tex_man.load("img/black-bishop.png")?;
+    tex_man.load("img/black-king.png")?;
+    tex_man.load("img/black-queen.png")?;
+    tex_man.load("img/black-knight.png")?;
+    tex_man.load("img/black-pawn.png")?;
+    tex_man.load("img/black-rook.png")?;
+    tex_man.load("img/white-bishop.png")?;
+    tex_man.load("img/white-king.png")?;
+    tex_man.load("img/white-queen.png")?;
+    tex_man.load("img/white-knight.png")?;
+    tex_man.load("img/white-pawn.png")?;
+    tex_man.load("img/white-rook.png")?;
 
-    pub fn init(&mut self) {
-        // Pawns
-        self.set_piece(Piece::Pawn, Color::White, 0, 1);
-        self.set_piece(Piece::Pawn, Color::White, 1, 1);
-        self.set_piece(Piece::Pawn, Color::White, 2, 1);
-        self.set_piece(Piece::Pawn, Color::White, 3, 1);
-        self.set_piece(Piece::Pawn, Color::White, 4, 1);
-        self.set_piece(Piece::Pawn, Color::White, 5, 1);
-        self.set_piece(Piece::Pawn, Color::White, 6, 1);
-        self.set_piece(Piece::Pawn, Color::White, 7, 1);
-        self.set_piece(Piece::Pawn, Color::Black, 0, 6);
-        self.set_piece(Piece::Pawn, Color::Black, 1, 6);
-        self.set_piece(Piece::Pawn, Color::Black, 2, 6);
-        self.set_piece(Piece::Pawn, Color::Black, 3, 6);
-        self.set_piece(Piece::Pawn, Color::Black, 4, 6);
-        self.set_piece(Piece::Pawn, Color::Black, 5, 6);
-        self.set_piece(Piece::Pawn, Color::Black, 6, 6);
-        self.set_piece(Piece::Pawn, Color::Black, 7, 6);
+    let sdl_context = sdl2::init().unwrap();
 
-        // Rooks
-        self.set_piece(Piece::Rook, Color::White, 0, 0);
-        self.set_piece(Piece::Rook, Color::White, 7, 0);
-        self.set_piece(Piece::Rook, Color::Black, 0, 7);
-        self.set_piece(Piece::Rook, Color::Black, 7, 7);
+    let mut event_pump = sdl_context.event_pump().unwrap();
+    let mut selected_squares: Vec<(i32, i32)> = Vec::new();
+    let mut arrows: Vec<(i32, i32, i32, i32)> = Vec::new();
+    let mut start_pos_right: Option<(i32, i32)> = None; 
+    let mut start_pos_left: Option<(i32, i32)> = None; 
 
-        // Knights
-        self.set_piece(Piece::Knight, Color::White, 1, 0);
-        self.set_piece(Piece::Knight, Color::White, 6, 0);
-        self.set_piece(Piece::Knight, Color::Black, 1, 7);
-        self.set_piece(Piece::Knight, Color::Black, 6, 7);
+    'running: loop {
+        canvas.clear();
 
-
-        // Bishop
-        self.set_piece(Piece::Bishop, Color::White, 2, 0);
-        self.set_piece(Piece::Bishop, Color::White, 5, 0);
-        self.set_piece(Piece::Bishop, Color::Black, 2, 7);
-        self.set_piece(Piece::Bishop, Color::Black, 5, 7);
-
-        // Queen
-        self.set_piece(Piece::Queen, Color::White, 3, 0);
-        self.set_piece(Piece::Queen, Color::Black, 3, 7);
-
-        
-        // King
-        self.set_piece(Piece::King, Color::White, 4, 0);
-        self.set_piece(Piece::King, Color::Black, 4, 7);
-
-
-    }
-
-    pub fn set_piece(&mut self, p: Piece, c: Color, x: u64, y: u64) {        
-        let base:u64 = 2;
-        let position:u64 = base.pow((x + 8 * y) as u32);
-        
-        match (p, c) {
-            (Piece::King, Color::White) =>   self.white_king |= position,
-            (Piece::King, Color::Black) =>   self.black_king |= position,
-            (Piece::Queen, Color::White) =>  self.white_queen |= position,
-            (Piece::Queen, Color::Black) =>  self.black_queen |= position,
-            (Piece::Rook, Color::White) =>   self.white_rooks |= position,
-            (Piece::Rook, Color::Black) =>   self.black_rooks |= position,
-            (Piece::Bishop, Color::White) => self.white_bishops |= position,
-            (Piece::Bishop, Color::Black) => self.black_bishops |= position,
-            (Piece::Knight, Color::White) => self.white_knights |= position,
-            (Piece::Knight, Color::Black) => self.black_knights |= position,
-            (Piece::Pawn, Color::White) =>   self.white_pawns |= position,
-            (Piece::Pawn, Color::Black) =>   self.black_pawns |= position,
-        }
-    }
-
-    pub fn remove_piece(&mut self, p: Piece, c: Color ,x: u64,y: u64) {
-        let base:u64 = 2;
-        let position:u64 = base.pow((x + 8 * y) as u32);
-        match (p, c) {
-            (Piece::King, Color::White) =>   self.white_king -= position,
-            (Piece::King, Color::Black) =>   self.black_king -= position,
-            (Piece::Queen, Color::White) =>  self.white_queen -= position,
-            (Piece::Queen, Color::Black) =>  self.black_queen -= position,
-            (Piece::Rook, Color::White) =>   self.white_rooks -= position,
-            (Piece::Rook, Color::Black) =>   self.black_rooks -= position,
-            (Piece::Bishop, Color::White) => self.white_bishops -= position,
-            (Piece::Bishop, Color::Black) => self.black_bishops -= position,
-            (Piece::Knight, Color::White) => self.white_knights -= position,
-            (Piece::Knight, Color::Black) => self.black_knights -= position,
-            (Piece::Pawn, Color::White) =>   self.white_pawns -= position,
-            (Piece::Pawn, Color::Black) =>   self.black_pawns -= position,
-        }
-                
-    }
-
-    pub fn get_position(&self, x: u64, y: u64) -> Option<(Piece, Color)> {
-        let pos = x + 8 * y;
-        if self.black_pawns >> pos & 1 == 1  {
-            return Some((Piece::Pawn, Color::Black)); 
-        }
-        if self.white_pawns >> pos & 1 == 1 {
-            return Some((Piece::Pawn, Color::White)); 
-        }
-        if self.black_bishops >> pos & 1  == 1 {
-            return Some((Piece::Bishop, Color::Black)); 
-        }
-        if self.white_bishops >> pos & 1 == 1 {
-            return Some((Piece::Bishop, Color::White)); 
-        }
-        if self.black_king >> pos & 1 == 1 {
-            return Some((Piece::King, Color::Black)); 
-        }
-        if self.white_king >> pos & 1 == 1 {
-            return Some((Piece::King, Color::White)); 
-        }
-        if self.black_knights >> pos & 1 == 1 {
-            return Some((Piece::Knight, Color::Black)); 
-        }
-        if self.white_knights >> pos & 1 == 1 {
-            return Some((Piece::Knight, Color::White)); 
-        }
-        if self.black_queen >> pos & 1 == 1 {
-            return Some((Piece::Queen, Color::Black)); 
-        }
-        if self.white_queen >> pos & 1 == 1 {
-            return Some((Piece::Queen, Color::White)); 
-        }
-        if self.black_rooks >> pos & 1 == 1 {
-            return Some((Piece::Rook, Color::Black)); 
-        }
-        if self.white_rooks >> pos & 1 == 1 {
-            return Some((Piece::Rook, Color::White)); 
-        }
-        None
-    }
-
-    pub fn show(&self) {
-        let mut output = String::new();
-        for y in (0..8).rev() {
-            for x in 0..8 {
-                match self.get_position(x, y) {
-                    Some((Piece::King, Color::White)) =>   output += " K ",
-                    Some((Piece::King, Color::Black)) =>   output += " k ",
-                    Some((Piece::Queen, Color::Black)) =>  output += " q ",
-                    Some((Piece::Queen, Color::White)) =>  output += " Q ",
-                    Some((Piece::Rook, Color::White)) =>   output += " R ",
-                    Some((Piece::Rook, Color::Black)) =>   output += " r ",
-                    Some((Piece::Bishop, Color::White)) => output += " B ",
-                    Some((Piece::Bishop, Color::Black)) => output += " b ",
-                    Some((Piece::Knight, Color::White)) => output += " N ",
-                    Some((Piece::Knight, Color::Black)) => output += " n ",
-                    Some((Piece::Pawn, Color::White)) =>   output += " P ",
-                    Some((Piece::Pawn, Color::Black)) =>   output += " p ",
-                    None => output += "   ",
-                }
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit {..} |
+                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                    break 'running;
+                },
+                Event::KeyDown { keycode: Some(Keycode::R), .. } => {
+                    brett = schach::Schach::new();
+                    selected_squares.clear();
+                    arrows.clear();
+                },
+                Event::MouseButtonDown { mouse_btn, x, y, .. } => {
+                    match mouse_btn {
+                        MouseButton::Left => {
+                            start_pos_left = Some((x / SQUARE_SIZE as i32, y / SQUARE_SIZE as i32));
+                        }
+                        MouseButton::Right => {
+                            start_pos_right = Some((x / SQUARE_SIZE as i32, y / SQUARE_SIZE as i32));
+                        }
+                        _ => {}
+                    }
+                },
+                Event::MouseButtonUp { mouse_btn, x, y, .. } => {
+                    match mouse_btn {
+                        MouseButton::Right => {
+                            if start_pos_right == Some((x / SQUARE_SIZE as i32, y / SQUARE_SIZE as i32)) {
+                                let tmp = (x / SQUARE_SIZE as i32, y / SQUARE_SIZE as i32);
+                                if selected_squares.contains(&tmp) {
+                                    let index: usize = selected_squares.iter().position(|&r| r == tmp).unwrap();
+                                    selected_squares.remove(index);
+                                } else {
+                                    selected_squares.push((x / SQUARE_SIZE as i32, y / SQUARE_SIZE as i32));
+                                }
+                            } else {
+                                if let Some((start_x, start_y)) = start_pos_right {
+                                    let tmp = (start_x, start_y, x / SQUARE_SIZE as i32, y / SQUARE_SIZE as i32);
+                                    if arrows.contains(&tmp) {
+                                        let index = arrows.iter().position(|&r| r == tmp).unwrap();
+                                        arrows.remove(index);
+                                    } else {
+                                        arrows.push(tmp);
+                                    }
+                                }
+                            }
+                            start_pos_right = None;
+                        }
+                        MouseButton::Left => {
+                            if start_pos_left == Some((x / SQUARE_SIZE as i32, y / SQUARE_SIZE as i32)) {
+                                selected_squares = brett.get_legal_moves((x as u32 / SQUARE_SIZE) as u64, (y as u32 / SQUARE_SIZE) as u64);
+                                arrows.clear();
+                            } else if !start_pos_left.is_none() {
+                                let (a,b) = start_pos_left.unwrap();
+                                let c = x / SQUARE_SIZE as i32;
+                                let d = y / SQUARE_SIZE as i32;
+                                if brett.get_legal_moves(a as u64, b as u64).contains(&(c,d)) {
+                                    brett.move_piece(a as u64, b as u64, c as u64, d as u64);
+                                    selected_squares.clear();
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                },
+                _ => {}
             }
-            output += "\n";
         }
-        println!("{}",output);
-    }
 
+        //Brett
+        for i in 0..8 {
+            for j in 0..8 {
+                let x = i * SQUARE_SIZE;
+                let y = j * SQUARE_SIZE;
+                
+                let color = if (i + j) % 2 == 0 && selected_squares.contains(&(i as i32, j as i32)) {
+                    Color::RGB(255, 150, 150)
+                } else if (i + j) % 2 == 1 && selected_squares.contains(&(i as i32, j as i32)) {
+                    Color::RGB(100, 70, 30) 
+                } else if (i + j) % 2 == 0 {
+                    Color::RGB(255, 255, 255) 
+                } else {
+                    Color::RGB(20, 100, 20) 
+                };
+                canvas.set_draw_color(color);
+                canvas.fill_rect(sdl2::rect::Rect::new(x as i32, y as i32, SQUARE_SIZE, SQUARE_SIZE)).unwrap();
+            }
+        }
+
+        // Figuren
+        for (c,p,i,j) in  brett.get_positions() {
+            let texture_name = match (p,c) {
+                (schach::Piece::King, schach::Color::White) => "img/white-king.png",
+                (schach::Piece::King, schach::Color::Black) => "img/black-king.png",
+                (schach::Piece::Queen, schach::Color::White) => "img/white-queen.png",
+                (schach::Piece::Queen, schach::Color::Black) => "img/black-queen.png",
+                (schach::Piece::Rook, schach::Color::White) => "img/white-rook.png",
+                (schach::Piece::Rook, schach::Color::Black) => "img/black-rook.png",
+                (schach::Piece::Bishop, schach::Color::White) => "img/white-bishop.png",
+                (schach::Piece::Bishop, schach::Color::Black) => "img/black-bishop.png",
+                (schach::Piece::Knight, schach::Color::White) => "img/white-knight.png",
+                (schach::Piece::Knight, schach::Color::Black) => "img/black-knight.png",
+                (schach::Piece::Pawn, schach::Color::White) => "img/white-pawn.png",
+                (schach::Piece::Pawn, schach::Color::Black) => "img/black-pawn.png",
+            };
+            let img_size = 128;
+            let texture = tex_man.load(&texture_name)?;
+            let src = Rect::new(0,0,img_size,img_size);
+            let x: i32 = (i as u32 * SQUARE_SIZE) as i32;
+            let y: i32 = (j as u32 * SQUARE_SIZE) as i32;
+            let dest = Rect::new(x,y,SQUARE_SIZE,SQUARE_SIZE);
+            let center = Point::new( 0,0);
+
+            canvas.copy_ex(
+                &texture, 
+                src,  
+                dest,
+                0.0,
+                center, 
+                false, 
+                false 
+            )?;                  
+        }
+
+        
+        // Pfeile
+        for (start_x, start_y, end_x, end_y) in &arrows {
+            let start = (start_x * SQUARE_SIZE as i32 + SQUARE_SIZE as i32 / 2, start_y * SQUARE_SIZE as i32 + SQUARE_SIZE as i32 / 2);
+            let end = (end_x * SQUARE_SIZE as i32 + SQUARE_SIZE as i32 / 2, end_y * SQUARE_SIZE as i32 + SQUARE_SIZE as i32 / 2);
+            draw_arrow(&mut canvas, start, end);
+        }
+        
+        canvas.present();
+        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 1000));
+    }
+    Ok(())
+}
+
+fn draw_arrow(canvas: &mut sdl2::render::Canvas<sdl2::video::Window>, start: (i32, i32), end: (i32, i32)) {
+    let (start_x, start_y) = start;
+    let (end_x, end_y) = end;
+
+    canvas.set_draw_color(Color::RGB(0, 255, 0));
+    canvas.draw_line(start, end).unwrap();
+
+    let dir_x = end_x - start_x;
+    let dir_y = end_y - start_y;
+
+    let len = ((dir_x * dir_x + dir_y * dir_y) as f64).sqrt();
+    let dir_x = (dir_x as f64 / len * 10.0) as i32;
+    let dir_y = (dir_y as f64 / len * 10.0) as i32;
+
+    let arrow_point1 = (end_x - dir_x - dir_y, end_y - dir_y + dir_x);
+    let arrow_point2 = (end_x - dir_x + dir_y, end_y - dir_y - dir_x);
+
+    canvas.draw_line(end, arrow_point1).unwrap();
+    canvas.draw_line(end, arrow_point2).unwrap();
 }
