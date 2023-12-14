@@ -47,6 +47,7 @@ pub fn main() -> Result<(), String> {
 
     let mut event_pump = sdl_context.event_pump().unwrap();
     let mut selected_squares: Vec<(i32, i32)> = Vec::new();
+    let mut active_piece: Option<(i32, i32)> = None;
     let mut arrows: Vec<(i32, i32, i32, i32)> = Vec::new();
     let mut start_pos_right: Option<(i32, i32)> = None; 
     let mut start_pos_left: Option<(i32, i32)> = None; 
@@ -102,13 +103,26 @@ pub fn main() -> Result<(), String> {
                         }
                         MouseButton::Left => {
                             if start_pos_left == Some((x / SQUARE_SIZE as i32, y / SQUARE_SIZE as i32)) {
-                                selected_squares = brett.get_legal_moves((x as u32 / SQUARE_SIZE) as u64, (y as u32 / SQUARE_SIZE) as u64);
+                                selected_squares = brett.get_legal_moves((x as u32 / SQUARE_SIZE) as u64, (y as u32 / SQUARE_SIZE) as u64, 1);
+                                if !active_piece.is_none() && active_piece != start_pos_left {
+                                    let (c,d) = start_pos_left.unwrap();
+                                    let a = active_piece.unwrap().0;
+                                    let b = active_piece.unwrap().1;
+                                    if brett.get_legal_moves(a as u64, b as u64, 1).contains(&(c,d)) {
+                                        brett.move_piece(a as u64, b as u64, c as u64, d as u64);
+                                        selected_squares.clear();
+                                        active_piece = None;
+                                    }
+                                } 
+                                if selected_squares.len() > 0 {
+                                    active_piece = start_pos_left;
+                                }
                                 arrows.clear();
                             } else if !start_pos_left.is_none() {
                                 let (a,b) = start_pos_left.unwrap();
                                 let c = x / SQUARE_SIZE as i32;
                                 let d = y / SQUARE_SIZE as i32;
-                                if brett.get_legal_moves(a as u64, b as u64).contains(&(c,d)) {
+                                if brett.get_legal_moves(a as u64, b as u64, 1).contains(&(c,d)) {
                                     brett.move_piece(a as u64, b as u64, c as u64, d as u64);
                                     selected_squares.clear();
                                 }

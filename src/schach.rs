@@ -4,7 +4,7 @@ pub enum Color {
     Black
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Piece {
     King,
     Queen,
@@ -29,6 +29,7 @@ pub struct Schach {
     white_knights: u64,
     black_rooks: u64,
     white_rooks: u64,
+    en_passant: Option<(i32,i32)>,
 }
 
 impl Schach {
@@ -47,13 +48,21 @@ impl Schach {
             white_knights : 0b01000010_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
             black_rooks   : 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_10000001,
             white_rooks   : 0b10000001_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
+            en_passant    : None,
         }
     }
 
     pub fn move_piece(&mut self, from_x: u64, from_y: u64, to_x: u64, to_y: u64) {
+        self.en_passant = None;
         let from = self.get_piece_at(from_x, from_y);
         let to = self.get_piece_at(to_x, to_y);
         if let Some((p_f,c_f)) = from {
+            if p_f == Piece::Pawn && (to_y as i32 - from_y as i32).abs() == 2 {
+                self.en_passant = match c_f { 
+                    Color::White => Some((to_x as i32, to_y as i32 + 1)),
+                    Color::Black => Some((to_x as i32, to_y as i32 - 1)),
+                }
+            }
             match to {
                 Some(_) => {
                     self.remove_piece(to_x, to_y);
@@ -61,6 +70,12 @@ impl Schach {
                     self.remove_piece(from_x, from_y);
                 },
                 None => {
+                    if p_f == Piece::Pawn && (to_x as i32 - from_x as i32).abs() == 1 {
+                        match c_f {
+                            Color::White => self.remove_piece(to_x, to_y + 1),
+                            Color::Black => self.remove_piece(to_x, to_y - 1),
+                        }
+                    }
                     self.set_piece(&p_f, &c_f, to_x, to_y);
                     self.remove_piece(from_x, from_y);
                 },
@@ -91,7 +106,35 @@ impl Schach {
         result
     }
 
-    pub fn get_legal_moves(&self, x: u64, y: u64) -> Vec<(i32, i32)> {
+    fn log2(&self, x: u64) -> u64 {
+        63 - x.leading_zeros() as u64
+    }
+
+    pub fn get_king_pos(&self, c: &Color) -> (u64,u64) {
+        let bin_log = match c {
+            Color::White => self.log2(self.white_king),
+            Color::Black => self.log2(self.black_king),
+        };
+        (bin_log % 8, bin_log / 8)
+    }
+
+    fn is_valid_move(&self, c: &Color, from_x: u64, from_y: u64, to_x: u64, to_y:u64) -> bool {
+        let mut brett = self.clone();
+        brett.move_piece(from_x, from_y, to_x, to_y);
+        let (king_x, king_y) = brett.get_king_pos(c);
+
+        for x in 0..8 {
+            for y in 0..8 {
+                let moves = brett.get_legal_moves(x, y, 0);
+                if moves.contains(&(king_x as i32, king_y as i32)) {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    pub fn get_legal_moves(&self, x: u64, y: u64, tiefe: u8) -> Vec<(i32, i32)> {
         let piece = self.get_piece_at(x, y);
         if let Some((_,c)) = &piece {
             if *c != self.active_player {
@@ -99,37 +142,26 @@ impl Schach {
             }
         }
         match piece {
-            Some((Piece::King, c)) => {
-                let moves = vec![(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)];
-                self.generate_moves(c, x, y, 1, moves)
-            },
-            Some((Piece::Queen, c)) => {
-                let moves = vec![(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)];
-                self.generate_moves(c, x, y, 7, moves)
-            },
-            Some((Piece::Bishop, c)) => {
-                let moves = vec![(-1,-1), (-1,1), (1,-1),  (1,1)];
-                self.generate_moves(c, x, y, 7, moves)
-            },
-            Some((Piece::Knight, c)) => {
-                let moves = vec![(-1,-2), (-1,2), (1,-2), (1,2), (2,1), (2,-1), (-2,1), (-2,-1)];
-                self.generate_moves(c, x, y, 1, moves)
-            },
-            Some((Piece::Rook, c)) => {
-                let moves = vec![(-1,0), (0,-1), (0,1), (1,0)];
-                self.generate_moves(c, x, y, 7, moves)
-            },
-            Some((Piece::Pawn, c)) => {
+            Some((Piece::King  , c)) => self.generate_moves(c, x, y, 1, tiefe, vec![(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)]),
+            Some((Piece::Queen , c)) => self.generate_moves(c, x, y, 7, tiefe, vec![(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)]),
+            Some((Piece::Bishop, c)) => self.generate_moves(c, x, y, 7, tiefe, vec![(-1,-1), (-1,1), (1,-1),  (1,1)]),
+            Some((Piece::Knight, c)) => self.generate_moves(c, x, y, 1, tiefe, vec![(-1,-2), (-1,2), (1,-2), (1,2), (2,1), (2,-1), (-2,1), (-2,-1)]),
+            Some((Piece::Rook  , c)) => self.generate_moves(c, x, y, 7, tiefe, vec![(-1,0), (0,-1), (0,1), (1,0)]),
+            Some((Piece::Pawn  , c)) => {
                 let mut result = Vec::new();
                 let direction = match c { Color::White => -1, Color::Black => 1 };
                 let a = x as i32;
                 let mut b = y as i32 + direction;
                 if b < 8 && b >= 0 && self.get_piece_at(a as u64, b as u64).is_none() {
-                    result.push((a, b));
+                    if tiefe == 0 || self.is_valid_move(&c, x, y, a as u64, b as u64) {
+                        result.push((a, b));
+                    }
                     if (c == Color::White && y == 6) || (c == Color::Black && y == 1) {
                         b += direction;
                         if b < 8 && b >= 0 && self.get_piece_at(a as u64, b as u64).is_none() {
-                            result.push((a, b));
+                            if tiefe == 0 || self.is_valid_move(&c, x, y, a as u64, b as u64) {
+                                result.push((a, b));
+                            }
                         }
                     }
                 }
@@ -137,9 +169,21 @@ impl Schach {
                     if a >= 0 && a < 8 && b >= 0 && b < 8 {
                         if let Some((_,c_d)) = self.get_piece_at(a as u64, b as u64) {
                             if c != c_d {
-                                result.push((a, b));
+                                if tiefe == 0 || self.is_valid_move(&c, x, y, a as u64, b as u64) {
+                                    result.push((a, b));
+                                }
                             }
                         }
+                    }
+                }
+                if let Some(pos) = self.en_passant {
+                    let b = match c { Color::White => y as i32 - 1, Color::Black => y as i32 + 1 };
+                    for a in [x as i32 + 1, x as i32 - 1] {
+                        if (a,b) == pos {
+                            if tiefe == 0 || self.is_valid_move(&c, x, y, a as u64, b as u64) {
+                                result.push((a,b));
+                            }
+                        } 
                     }
                 }
                 result
@@ -148,7 +192,7 @@ impl Schach {
         }
     }
 
-    fn generate_moves(&self,c: Color, x: u64, y:u64 ,range: u8, moves: Vec<(i32,i32)>) -> Vec<(i32, i32)> {
+    fn generate_moves(&self,c: Color, x: u64, y:u64 ,range: u8, tiefe: u8, moves: Vec<(i32,i32)>) -> Vec<(i32, i32)> {
         let mut result = Vec::new();
         for m in moves {
             let mut a = x as i32;
@@ -161,11 +205,15 @@ impl Schach {
                 }
                 if let Some((_, p_c)) = self.get_piece_at(a as u64, b as u64) {
                     if p_c != c {
-                        result.push((a, b));
+                        if tiefe == 0 || self.is_valid_move(&c, x, y, a as u64, b as u64) {
+                            result.push((a, b));
+                        }
                     } 
                     break;
                 } 
-                result.push((a, b));
+                if tiefe == 0 || self.is_valid_move(&c, x, y, a as u64, b as u64) {
+                    result.push((a, b));
+                }
             }  
         }
         result
