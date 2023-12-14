@@ -14,6 +14,12 @@ pub enum Piece {
     Pawn
 }
 
+pub enum Outcome {
+    Checkmate(Color),
+    Stalemate,
+    None,
+}
+
 #[derive(Clone)]
 pub struct Schach {
     active_player: Color,
@@ -29,8 +35,8 @@ pub struct Schach {
     white_knights: u64,
     black_rooks: u64,
     white_rooks: u64,
-    en_passant: Option<(i32,i32)>,
     castle: u64,
+    en_passant: Option<(i32,i32)>,
 }
 
 impl Schach {
@@ -49,9 +55,38 @@ impl Schach {
             white_knights : 0b01000010_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
             black_rooks   : 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_10000001,
             white_rooks   : 0b10000001_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
-            en_passant    : None,
             castle        : 0b10010001_00000000_00000000_00000000_00000000_00000000_00000000_10010001,
+            en_passant    : None,
         }
+    }
+
+    pub fn find_best_move(&self) -> Option<(i32,i32)>{
+        None
+    }
+
+    pub fn eval(&self, active_c: &Color) -> i32 {
+        let mut eval = 0;
+        for (c,p,_, _) in self.get_positions() {
+            let value = match (&c,&p) {
+                (Color::White, Piece::King) => 100,
+                (Color::White, Piece::Queen) => 9,
+                (Color::White, Piece::Rook) => 5,
+                (Color::White, Piece::Bishop) => 3,
+                (Color::White, Piece::Knight) => 3,
+                (Color::White, Piece::Pawn) => 1,
+                (Color::Black, Piece::King) => -100,
+                (Color::Black, Piece::Queen) => -9,
+                (Color::Black, Piece::Rook) => -5,
+                (Color::Black, Piece::Bishop) => -3,
+                (Color::Black, Piece::Knight) => -3,
+                (Color::Black, Piece::Pawn) => -1,
+            };
+            match &active_c {
+                Color::White => eval += value,
+                Color::Black => eval -= value,
+            };
+        }
+        eval
     }
 
     pub fn move_piece(&mut self, from_x: u64, from_y: u64, to_x: u64, to_y: u64) {
@@ -136,6 +171,29 @@ impl Schach {
         result
     }
 
+    pub fn get_outcome(&self) -> Outcome {
+        let attacked_squares = self.atacked_squares_bitmap();
+        let aktive_king = match self.active_player { Color::White => self.white_king, Color::Black => self.black_king};
+        let opponent = match self.active_player { Color::White => Color::Black, Color::Black => Color::White};
+        let is_check = attacked_squares & aktive_king != 0;
+        let mut legal_moves = 0;
+        for x in 0..8 {
+            for y in 0..8 {
+                legal_moves += self.get_legal_moves(x, y, 1).len();
+            }
+        }
+        if legal_moves == 0 {
+            if is_check {
+                Outcome::Checkmate(opponent)
+            } else {
+                Outcome::Stalemate
+            }
+        } else {
+            Outcome::None
+        }
+
+    }
+
     fn log2(&self, x: u64) -> u64 {
         63 - x.leading_zeros() as u64
     }
@@ -178,7 +236,9 @@ impl Schach {
             for y in 0..8 {
                 let moves = brett.get_legal_moves(x, y, 0);
                 for (x_m,y_m) in moves {
-                    bitmap += 1 << (x_m + 8 * y_m) as u64;
+                    if bitmap & 1 << (x_m + 8 * y_m) as u64 == 0 {
+                        bitmap += 1 << (x_m + 8 * y_m) as u64;
+                    }
                 }
             }
         }
@@ -193,6 +253,10 @@ impl Schach {
             }
         }
         match piece {
+            Some((Piece::Queen , c)) => self.generate_moves(&c, x, y, 7, tiefe, vec![(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)]),
+            Some((Piece::Bishop, c)) => self.generate_moves(&c, x, y, 7, tiefe, vec![(-1,-1), (-1,1), (1,-1),  (1,1)]),
+            Some((Piece::Knight, c)) => self.generate_moves(&c, x, y, 1, tiefe, vec![(-1,-2), (-1,2), (1,-2), (1,2), (2,1), (2,-1), (-2,1), (-2,-1)]),
+            Some((Piece::Rook  , c)) => self.generate_moves(&c, x, y, 7, tiefe, vec![(-1,0), (0,-1), (0,1), (1,0)]),
             Some((Piece::King  , c)) => {
                 let mut result = self.generate_moves(&c, x, y, 1, tiefe, vec![(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)]);
                 if tiefe > 0 && self.castle >> (x + 8 * y) & 1 == 1 {
@@ -227,10 +291,6 @@ impl Schach {
                 
                 result
             },
-            Some((Piece::Queen , c)) => self.generate_moves(&c, x, y, 7, tiefe, vec![(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)]),
-            Some((Piece::Bishop, c)) => self.generate_moves(&c, x, y, 7, tiefe, vec![(-1,-1), (-1,1), (1,-1),  (1,1)]),
-            Some((Piece::Knight, c)) => self.generate_moves(&c, x, y, 1, tiefe, vec![(-1,-2), (-1,2), (1,-2), (1,2), (2,1), (2,-1), (-2,1), (-2,-1)]),
-            Some((Piece::Rook  , c)) => self.generate_moves(&c, x, y, 7, tiefe, vec![(-1,0), (0,-1), (0,1), (1,0)]),
             Some((Piece::Pawn  , c)) => {
                 let mut result = Vec::new();
                 let direction = match c { Color::White => -1, Color::Black => 1 };

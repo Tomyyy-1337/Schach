@@ -110,6 +110,8 @@ pub fn main() -> Result<(), String> {
                                     let b = active_piece.unwrap().1;
                                     if brett.get_legal_moves(a as u64, b as u64, 1).contains(&(c,d)) {
                                         brett.move_piece(a as u64, b as u64, c as u64, d as u64);
+                                        print_outcome(&brett);
+                                        println!("{}", brett.eval(&schach::Color::White));
                                         selected_squares.clear();
                                         active_piece = None;
                                     }
@@ -124,6 +126,7 @@ pub fn main() -> Result<(), String> {
                                 let d = y / SQUARE_SIZE as i32;
                                 if brett.get_legal_moves(a as u64, b as u64, 1).contains(&(c,d)) {
                                     brett.move_piece(a as u64, b as u64, c as u64, d as u64);
+                                    print_outcome(&brett);
                                     selected_squares.clear();
                                 }
                             }
@@ -202,6 +205,15 @@ pub fn main() -> Result<(), String> {
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 1000));
     }
     Ok(())
+}
+
+fn print_outcome(brett: &schach::Schach) {
+    match brett.get_outcome() {
+        schach::Outcome::Checkmate(schach::Color::White) => println!("Weiss gewinnt"),
+        schach::Outcome::Checkmate(schach::Color::Black) => println!("Schwarz gewinnt"),
+        schach::Outcome::Stalemate => println!("Stalemate"),
+        schach::Outcome::None => (),
+    }
 }
 
 fn draw_arrow(canvas: &mut sdl2::render::Canvas<sdl2::video::Window>, start: (i32, i32), end: (i32, i32)) {
