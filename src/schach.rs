@@ -30,6 +30,7 @@ pub struct Schach {
     black_rooks: u64,
     white_rooks: u64,
     en_passant: Option<(i32,i32)>,
+    castle: u64,
 }
 
 impl Schach {
@@ -49,42 +50,71 @@ impl Schach {
             black_rooks   : 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_10000001,
             white_rooks   : 0b10000001_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
             en_passant    : None,
+            castle        : 0b10010001_00000000_00000000_00000000_00000000_00000000_00000000_10010001,
         }
     }
 
     pub fn move_piece(&mut self, from_x: u64, from_y: u64, to_x: u64, to_y: u64) {
         self.en_passant = None;
-        let from = self.get_piece_at(from_x, from_y);
-        let to = self.get_piece_at(to_x, to_y);
-        if let Some((p_f,c_f)) = from {
-            if p_f == Piece::Pawn && (to_y as i32 - from_y as i32).abs() == 2 {
-                self.en_passant = match c_f { 
-                    Color::White => Some((to_x as i32, to_y as i32 + 1)),
-                    Color::Black => Some((to_x as i32, to_y as i32 - 1)),
+
+        if let Some((mut p_f,c_f)) = self.get_piece_at(from_x, from_y) {
+            // Update En-Passant
+            if p_f == Piece::Pawn {
+                if (to_y as i32 - from_y as i32).abs() == 2 {
+                    self.en_passant = match c_f { 
+                        Color::White => Some((to_x as i32, to_y as i32 + 1)),
+                        Color::Black => Some((to_x as i32, to_y as i32 - 1)),
+                    }
+                } else if to_y == 7 || to_y == 0 {
+                    p_f = Piece::Queen; 
                 }
             }
-            match to {
+
+            // Update castle
+            if (p_f == Piece::Rook || p_f == Piece::King) && self.castle >> (from_x + 8 * from_y) & 1 == 1  {
+                self.castle -= 1 << (from_x + 8 * from_y);
+            }
+
+            // Move Piece
+            match self.get_piece_at(to_x, to_y) {
                 Some(_) => {
                     self.remove_piece(to_x, to_y);
                     self.set_piece(&p_f, &c_f, to_x, to_y);
                     self.remove_piece(from_x, from_y);
                 },
                 None => {
+                    // Castle Ausführen 
+                    if p_f == Piece::King && (to_x as i32 - from_x as i32).abs() == 2 {
+                        self.set_piece(&p_f, &c_f, to_x, to_y);
+                        self.remove_piece(from_x, from_y);
+                        if to_x as i32 - from_x as i32 == 2 {
+                            self.set_piece(&Piece::Rook, &c_f, to_x - 1, to_y);
+                            self.remove_piece(from_x + 3, from_y);
+                        } else {
+                            self.set_piece(&Piece::Rook, &c_f, to_x + 1, to_y);
+                            self.remove_piece(from_x - 4, from_y);
+                        }
+                    }
+                    // En-passant zug ausführen
                     if p_f == Piece::Pawn && (to_x as i32 - from_x as i32).abs() == 1 {
                         match c_f {
                             Color::White => self.remove_piece(to_x, to_y + 1),
                             Color::Black => self.remove_piece(to_x, to_y - 1),
                         }
+                        self.set_piece(&p_f, &c_f, to_x, to_y);
+                    } else {
+                        self.set_piece(&p_f, &c_f, to_x, to_y);
+                        self.remove_piece(from_x, from_y);
                     }
-                    self.set_piece(&p_f, &c_f, to_x, to_y);
-                    self.remove_piece(from_x, from_y);
                 },
             }
+
+            // Update active player
+            self.active_player = match self.active_player {
+                Color::White => Color::Black,
+                Color::Black => Color::White,
+            } 
         }
-        self.active_player = match self.active_player {
-            Color::White => Color::Black,
-            Color::Black => Color::White,
-        } 
     }
 
     pub fn get_positions(&self) -> Vec<(Color, Piece, u64, u64)> {
@@ -134,6 +164,27 @@ impl Schach {
         true
     }
 
+    // Gibt eine bitmap der vom gegner attakierten Felder zurück
+    fn atacked_squares_bitmap(&self) -> u64 {
+        let mut brett = self.clone();
+        let mut bitmap = 0;
+
+        match self.active_player {
+            Color::White => brett.active_player = Color::Black,
+            Color::Black => brett.active_player = Color::White,
+        }
+
+        for x in 0..8 {
+            for y in 0..8 {
+                let moves = brett.get_legal_moves(x, y, 0);
+                for (x_m,y_m) in moves {
+                    bitmap += 1 << (x_m + 8 * y_m) as u64;
+                }
+            }
+        }
+        bitmap
+    }
+
     pub fn get_legal_moves(&self, x: u64, y: u64, tiefe: u8) -> Vec<(i32, i32)> {
         let piece = self.get_piece_at(x, y);
         if let Some((_,c)) = &piece {
@@ -142,11 +193,44 @@ impl Schach {
             }
         }
         match piece {
-            Some((Piece::King  , c)) => self.generate_moves(c, x, y, 1, tiefe, vec![(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)]),
-            Some((Piece::Queen , c)) => self.generate_moves(c, x, y, 7, tiefe, vec![(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)]),
-            Some((Piece::Bishop, c)) => self.generate_moves(c, x, y, 7, tiefe, vec![(-1,-1), (-1,1), (1,-1),  (1,1)]),
-            Some((Piece::Knight, c)) => self.generate_moves(c, x, y, 1, tiefe, vec![(-1,-2), (-1,2), (1,-2), (1,2), (2,1), (2,-1), (-2,1), (-2,-1)]),
-            Some((Piece::Rook  , c)) => self.generate_moves(c, x, y, 7, tiefe, vec![(-1,0), (0,-1), (0,1), (1,0)]),
+            Some((Piece::King  , c)) => {
+                let mut result = self.generate_moves(&c, x, y, 1, tiefe, vec![(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)]);
+                if tiefe > 0 && self.castle >> (x + 8 * y) & 1 == 1 {
+                    let collision = self.white_bishops + self.white_knights + self.white_queen + self.white_rooks + self.white_pawns + self.black_bishops + self.black_knights + self.black_queen + self.black_rooks + self.black_pawns;
+                    match c {
+                        Color::White => {
+                            let path     = 0b00001110_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+                            let king_path:u64 = 0b00011100_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+                            let attacked = self.atacked_squares_bitmap();
+                            if  collision & path == 0 && king_path & attacked == 0 && self.castle >> (x - 4 + 8 * y) & 1 == 1 {
+                                result.push((x as i32 - 2, y as i32));
+                            }
+                            let path     = 0b01110000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
+                            if collision & path == 0 && path & attacked == 0 && self.castle >> (x + 3 + 8 * y) & 1 == 1 {
+                                result.push((x as i32 + 2, y as i32));
+                            }
+                        },
+                        Color::Black => {
+                            let path     = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00001110;
+                            let king_path:u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00011100;
+                            let attacked = self.atacked_squares_bitmap();
+                            if  collision & path == 0 && king_path & attacked == 0 && self.castle >> (x - 4 + 8 * y) & 1 == 1 {
+                                result.push((x as i32 - 2, y as i32));
+                            }
+                            let path     = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_01110000;
+                            if collision & path == 0 && path & attacked == 0 && self.castle >> (x + 3 + 8 * y) & 1 == 1 {
+                                result.push((x as i32 + 2, y as i32));
+                            }
+                        },
+                    }
+                }
+                
+                result
+            },
+            Some((Piece::Queen , c)) => self.generate_moves(&c, x, y, 7, tiefe, vec![(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)]),
+            Some((Piece::Bishop, c)) => self.generate_moves(&c, x, y, 7, tiefe, vec![(-1,-1), (-1,1), (1,-1),  (1,1)]),
+            Some((Piece::Knight, c)) => self.generate_moves(&c, x, y, 1, tiefe, vec![(-1,-2), (-1,2), (1,-2), (1,2), (2,1), (2,-1), (-2,1), (-2,-1)]),
+            Some((Piece::Rook  , c)) => self.generate_moves(&c, x, y, 7, tiefe, vec![(-1,0), (0,-1), (0,1), (1,0)]),
             Some((Piece::Pawn  , c)) => {
                 let mut result = Vec::new();
                 let direction = match c { Color::White => -1, Color::Black => 1 };
@@ -192,7 +276,7 @@ impl Schach {
         }
     }
 
-    fn generate_moves(&self,c: Color, x: u64, y:u64 ,range: u8, tiefe: u8, moves: Vec<(i32,i32)>) -> Vec<(i32, i32)> {
+    fn generate_moves(&self,c: &Color, x: u64, y:u64 ,range: u8, tiefe: u8, moves: Vec<(i32,i32)>) -> Vec<(i32, i32)> {
         let mut result = Vec::new();
         for m in moves {
             let mut a = x as i32;
@@ -204,7 +288,7 @@ impl Schach {
                     break;
                 }
                 if let Some((_, p_c)) = self.get_piece_at(a as u64, b as u64) {
-                    if p_c != c {
+                    if p_c != *c {
                         if tiefe == 0 || self.is_valid_move(&c, x, y, a as u64, b as u64) {
                             result.push((a, b));
                         }
