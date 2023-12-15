@@ -15,6 +15,8 @@ pub mod schach;
 const SQUARE_SIZE:u32 = 100;
 
 pub fn main() -> Result<(), String> {
+    rayon::ThreadPoolBuilder::new().num_threads(16).build_global().unwrap();
+
     let mut brett = Schach::new();
 
     let sdl_context = sdl2::init().unwrap();
@@ -64,13 +66,13 @@ pub fn main() -> Result<(), String> {
             },
         }
         if brett.active_player == schach::Color::White {
-            let (a,b,c,d) = brett.best_move(3); 
+            let (a,b,c,d) = brett.best_move(4); 
             brett.move_piece(a, b, c, d);
             //print_outcome(&brett);
             
         } 
         else if brett.active_player == schach::Color::Black {
-            let (a,b,c,d) = brett.best_move(3); 
+            let (a,b,c,d) = brett.best_move(4); 
             brett.move_piece(a, b, c, d);   
             //print_outcome(&brett);
         } 

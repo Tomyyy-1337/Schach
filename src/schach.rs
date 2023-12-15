@@ -190,7 +190,7 @@ impl Schach {
         self.fifty_move += 1;
 
         if let Some((mut p_f,c_f)) = self.get_piece_at(from_x, from_y) {
-            // Update En-Passant
+            // Update En-Passant und 50 move
             if p_f == Piece::Pawn {
                 self.fifty_move = 0;
                 if (to_y as i32 - from_y as i32).abs() == 2 {
@@ -210,35 +210,36 @@ impl Schach {
 
             // Move Piece
             match self.get_piece_at(to_x, to_y) {
-                Some(_) => {
+                Some((p_t,c_t)) => {
                     self.fifty_move = 0;
-                    self.remove_piece(to_x, to_y);
+                    self.remove_piece_at(&p_t, &c_t, to_x, to_y);
                     self.set_piece(&p_f, &c_f, to_x, to_y);
-                    self.remove_piece(from_x, from_y);
+                    self.remove_piece_at(&p_f, &c_f, from_x, from_y);
                 },
                 None => {
                     // Castle Ausführen 
                     if p_f == Piece::King && (to_x as i32 - from_x as i32).abs() == 2 {
                         self.set_piece(&p_f, &c_f, to_x, to_y);
-                        self.remove_piece(from_x, from_y);
+                        self.remove_piece_at(&p_f, &c_f, from_x, from_y);
                         if to_x as i32 - from_x as i32 == 2 {
                             self.set_piece(&Piece::Rook, &c_f, to_x - 1, to_y);
-                            self.remove_piece(from_x + 3, from_y);
+                            self.remove_piece_at(&Piece::Rook, &c_f, from_x + 3, from_y);
                         } else {
                             self.set_piece(&Piece::Rook, &c_f, to_x + 1, to_y);
-                            self.remove_piece(from_x - 4, from_y);
+                            self.remove_piece_at(&Piece::Rook, &c_f, from_x - 4, from_y);
                         }
                     }
                     // En-passant zug ausführen
                     if p_f == Piece::Pawn && (to_x as i32 - from_x as i32).abs() == 1 {
+                        self.remove_piece_at(&p_f, &c_f, from_x, from_y);
                         match c_f {
-                            Color::White => self.remove_piece(to_x, to_y + 1),
-                            Color::Black => self.remove_piece(to_x, to_y - 1),
+                            Color::White => self.remove_at(to_x, to_y + 1),
+                            Color::Black => self.remove_at(to_x, to_y - 1),
                         }
                         self.set_piece(&p_f, &c_f, to_x, to_y);
                     } else {
                         self.set_piece(&p_f, &c_f, to_x, to_y);
-                        self.remove_piece(from_x, from_y);
+                        self.remove_piece_at(&p_f, &c_f, from_x, from_y);
                     }
                 },
             }
@@ -471,7 +472,7 @@ impl Schach {
         result
     }
     
-    pub fn set_piece(&mut self, p: &Piece, c: &Color, x: u64, y: u64) -> bool {        
+    fn set_piece(&mut self, p: &Piece, c: &Color, x: u64, y: u64) -> bool {        
         let position:u64 = 1 << (x + 8 * y);
         
         if let Some((_,c_tmp)) = self.get_piece_at(x, y) {
@@ -479,7 +480,6 @@ impl Schach {
                 return false;
             }
         }
-
         match (p, c) {
             (Piece::King, Color::White) =>   self.white_king |= position,
             (Piece::King, Color::Black) =>   self.black_king |= position,
@@ -497,7 +497,7 @@ impl Schach {
         true
     }
 
-    pub fn remove_piece(&mut self ,x: u64,y: u64) {
+    fn remove_at(&mut self ,x: u64,y: u64) {
         let position:u64 = 1 << (x + 8 * y);
         if let Some((p,c)) = self.get_piece_at(x, y) {
             match (p, c) {
@@ -517,7 +517,30 @@ impl Schach {
         }
     }
 
-    pub fn get_piece_at(&self, x: u64, y: u64) -> Option<(Piece, Color)> {
+    fn remove_piece_at(&mut self , piece: &Piece, color: &Color,x: u64,y: u64) {
+        let position:u64 = 1 << (x + 8 * y);
+        let bitmap_ptr: &mut u64 = match (piece, color) {
+            (Piece::King, Color::White) =>   &mut self.white_king,
+            (Piece::King, Color::Black) =>   &mut self.black_king,
+            (Piece::Queen, Color::White) =>  &mut self.white_queen, 
+            (Piece::Queen, Color::Black) =>  &mut self.black_queen,
+            (Piece::Rook, Color::White) =>   &mut self.white_rooks, 
+            (Piece::Rook, Color::Black) =>   &mut self.black_rooks, 
+            (Piece::Bishop, Color::White) => &mut self.white_bishops,
+            (Piece::Bishop, Color::Black) => &mut self.black_bishops,
+            (Piece::Knight, Color::White) => &mut self.white_knights,
+            (Piece::Knight, Color::Black) => &mut self.black_knights,
+            (Piece::Pawn, Color::Black) =>   &mut self.black_pawns,
+            (Piece::Pawn, Color::White) =>   &mut self.white_pawns, 
+        };
+        if *bitmap_ptr & position != 0 {
+            *bitmap_ptr -= position;
+        }
+        
+    }
+
+
+    fn get_piece_at(&self, x: u64, y: u64) -> Option<(Piece, Color)> {
         let pos = x + 8 * y;
         let pieces = [ (self.black_pawns, Piece::Pawn, Color::Black), (self.white_pawns, Piece::Pawn, Color::White), (self.black_bishops, Piece::Bishop, Color::Black), (self.white_bishops, Piece::Bishop, Color::White), (self.black_king, Piece::King, Color::Black), (self.white_king, Piece::King, Color::White), (self.black_knights, Piece::Knight, Color::Black), (self.white_knights, Piece::Knight, Color::White), (self.black_queen, Piece::Queen, Color::Black), (self.white_queen, Piece::Queen, Color::White), (self.black_rooks, Piece::Rook, Color::Black), (self.white_rooks, Piece::Rook, Color::White),];
 
