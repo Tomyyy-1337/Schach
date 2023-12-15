@@ -1,3 +1,5 @@
+use std::backtrace::BacktraceStatus;
+
 use rand::Rng;
 use rayon::prelude::*;
 
@@ -17,6 +19,7 @@ pub enum Piece {
     Pawn
 }
 
+#[derive(PartialEq)]
 pub enum Outcome {
     Checkmate(Color),
     Stalemate,
@@ -76,20 +79,68 @@ impl Schach {
     }
 
 
+    pub fn minmax(&mut self, depth:u64, mut alpha: f32, mut beta: f32, maximizing_player: bool ) -> f32 {
+        let mut brett = self.clone();
+        brett.active_player = match brett.active_player {
+            Color::Black => Color::White,
+            Color::White => Color::Black,
+        };
+        if depth == 0 || brett.get_outcome() != Outcome::None {
+            return self.eval_position();
+        }
+
+        if maximizing_player {
+            let mut max_eval = f32::MIN;
+            for (a,b,c,d) in self.get_all_legal_moves() {
+                let mut brett = self.clone();
+                brett.move_piece(a, b, c, d);
+                let eval = brett.minmax(depth - 1, alpha, beta, false);
+                max_eval = max_eval.max(eval);
+                alpha = alpha.max(eval);
+                if beta <= alpha {
+                    break;
+                }
+            } 
+            return max_eval;
+        } else {
+            let mut min_eval = f32::MAX;
+            for (a,b,c,d) in self.get_all_legal_moves() {
+                let mut brett = self.clone();
+                brett.move_piece(a, b, c, d);
+                let eval = brett.minmax(depth - 1, alpha, beta, true);
+                min_eval = min_eval.min(eval);
+                beta = beta.min(eval);
+                if beta <= alpha {
+                    break;
+                }
+            }
+            return min_eval;
+        } 
+    }   
+
 
     pub fn best_move(&self, depth: u64) -> (u64,u64,u64,u64) {
         let mut best = -1000.0;
         let mut best_move = (0,0,0,0);
-
+        
+        let maximizing_player = match self.active_player {
+            Color::Black => true,
+            Color::White => false,
+        };
+        let factor = match self.active_player {
+            Color::Black => -1.0,
+            Color::White =>  1.0,
+        };
+        
         let mut moves: Vec<(f32,u64,u64,u64,u64)> = Vec::new();
-
         self.get_all_legal_moves()
             .par_iter()
             .map(|(a,b,c,d)| {
+                let mut rng = rand::thread_rng(); 
                 let mut brett = self.clone();
                 brett.move_piece(*a, *b, *c, *d);
-                let eval = brett.alphabeta_negamax(depth, -1000.0, 1000.0);
-                (eval,*a,*b,*c,*d)
+                let eval = factor *  brett.minmax(depth, f32::MIN, f32::MAX, maximizing_player);
+                (eval + rng.gen::<f32>() * 0.1,*a,*b,*c,*d)
             }).collect_into_vec(&mut moves);
             
         for (f,a,b,c,d) in moves {
@@ -99,66 +150,34 @@ impl Schach {
             }
         }
         best_move
-
-        // for (a,b,c,d) in self.get_all_legal_moves() {
-        //     let mut brett = self.clone();
-        //     brett.move_piece(a as u64, b as u64, c as u64, d as u64);
-        //     let eval = brett.alphabeta_negamax(depth, -1000.0, 1000.0);
-        //     if eval > best {
-        //         best = eval;
-        //         best_move = (a,b,c,d);
-        //     }
-        // }
-        // best_move
-    }
-
-    pub fn alphabeta_negamax(&self, depth: u64, alpha: f32, beta: f32) -> f32 {
-        let factor = match self.active_player {
-            Color::Black => -1.0,
-            Color::White => 1.0,
-        };
-        if depth == 0 {
-            return self.eval_position();
-        }
-        let mut v = alpha;
-        for (a,b,c,d) in self.get_all_legal_moves() {
-            let mut brett = self.clone();
-            brett.move_piece(a as u64, b as u64, c as u64, d as u64);
-            v = v.max(factor * brett.alphabeta_negamax(depth-1, -beta, -v));
-            if v > beta || v.abs() >= 100.0 {
-                return v;
-            }
-        }
-        v
     }
 
     pub fn eval_position(&self) -> f32 {
         match self.get_outcome() {
-            Outcome::Checkmate(Color::White) => return 10000.0,
+            Outcome::Checkmate(Color::White) => return 1000.0,
+            Outcome::Checkmate(Color::Black) => return -1000.0,
             Outcome::Stalemate => return 0.0,
             Outcome::None => (),
-            Outcome::Checkmate(Color::Black) => return -10000.0,
         }
-        let mut rng = rand::thread_rng();
-        let mut eval = 0.0;
+        let mut eval:f32 = 0.0;
         for (c,p,_, _) in self.get_positions() {
             let value = match (&c,&p) {
-                (Color::White, Piece::King) => 100.0,
-                (Color::White, Piece::Queen) => 9.0,
-                (Color::White, Piece::Rook) => 5.0,
-                (Color::White, Piece::Bishop) => 3.0,
-                (Color::White, Piece::Knight) => 3.0,
+                (Color::White, Piece::King) => 0.0,
+                (Color::White, Piece::Queen) => 9.5,
+                (Color::White, Piece::Rook) => 5.63,
+                (Color::White, Piece::Bishop) => 3.33,
+                (Color::White, Piece::Knight) => 3.05,
                 (Color::White, Piece::Pawn) => 1.0,
-                (Color::Black, Piece::King) => -100.0,
-                (Color::Black, Piece::Queen) => -9.0,
-                (Color::Black, Piece::Rook) => -5.0,
-                (Color::Black, Piece::Bishop) => -3.0,
-                (Color::Black, Piece::Knight) => -3.0,
+                (Color::Black, Piece::King) => 0.0,
+                (Color::Black, Piece::Queen) => -9.5,
+                (Color::Black, Piece::Rook) => -5.63,
+                (Color::Black, Piece::Bishop) => -3.33,
+                (Color::Black, Piece::Knight) => -3.05,
                 (Color::Black, Piece::Pawn) => -1.0,
             };
             eval += value;
         }
-        eval + rng.gen::<f32>() * 0.2
+        eval 
     }
 
     pub fn move_piece(&mut self, from_x: u64, from_y: u64, to_x: u64, to_y: u64) {

@@ -55,21 +55,20 @@ pub fn main() -> Result<(), String> {
     'running: loop {
         canvas.clear();
 
-        if brett.active_player == schach::Color::Black {
-            let (a,b,c,d) = brett.best_move(2); 
-            brett.move_piece(a, b, c, d);
-            
-        } 
-        else if brett.active_player == schach::Color::White {
-            let (a,b,c,d) = brett.best_move(2); 
-            brett.move_piece(a, b, c, d);
-            
-        } 
-        // print_outcome(&brett);
         // match brett.get_outcome() {
-        //     Outcome::None => (),
+        //     schach::Outcome::None => (),
         //     _ => brett = Schach::new(),
         // }
+        if brett.active_player == schach::Color::Black {
+            let (a,b,c,d) = brett.best_move(3); 
+            brett.move_piece(a, b, c, d);
+            print_outcome(&brett);
+            
+        } 
+        // else if brett.active_player == schach::Color::White {
+        //     let (a,b,c,d) = brett.best_move(3); 
+        //     brett.move_piece(a, b, c, d);   
+        // } 
 
         for event in event_pump.poll_iter() {
             match event {
@@ -126,7 +125,6 @@ pub fn main() -> Result<(), String> {
                                     let b = active_piece.unwrap().1;
                                     if brett.get_legal_moves(a as u64, b as u64, 1).contains(&(c,d)) {
                                         brett.move_piece(a as u64, b as u64, c as u64, d as u64);
-                                        println!("{}", brett.eval_position());
                                         print_outcome(&brett);
                                         selected_squares.clear();
                                         active_piece = None;
@@ -142,7 +140,6 @@ pub fn main() -> Result<(), String> {
                                 let d = y / SQUARE_SIZE as i32;
                                 if brett.get_legal_moves(a as u64, b as u64, 1).contains(&(c,d)) {
                                     brett.move_piece(a as u64, b as u64, c as u64, d as u64);
-                                    println!("{}", brett.eval_position());
                                     print_outcome(&brett);
                                     selected_squares.clear();
                                 }
@@ -229,7 +226,7 @@ fn print_outcome(brett: &schach::Schach) {
         schach::Outcome::Checkmate(schach::Color::White) => println!("Weiss gewinnt"),
         schach::Outcome::Checkmate(schach::Color::Black) => println!("Schwarz gewinnt"),
         schach::Outcome::Stalemate => println!("Stalemate"),
-        schach::Outcome::None => (),
+        schach::Outcome::None => println!("Evaluation: {}", brett.eval_position()),
     }
 }
 
