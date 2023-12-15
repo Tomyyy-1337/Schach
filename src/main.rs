@@ -54,21 +54,25 @@ pub fn main() -> Result<(), String> {
 
     'running: loop {
         canvas.clear();
-
-        // match brett.get_outcome() {
-        //     schach::Outcome::None => (),
-        //     _ => brett = Schach::new(),
-        // }
-        if brett.active_player == schach::Color::Black {
+        
+        match brett.get_outcome() {
+            schach::Outcome::None => (),
+            _ => {
+                print_outcome(&brett);
+                brett = Schach::new();
+            },
+        }
+        if brett.active_player == schach::Color::White {
             let (a,b,c,d) = brett.best_move(3); 
             brett.move_piece(a, b, c, d);
-            print_outcome(&brett);
+            //print_outcome(&brett);
             
         } 
-        // else if brett.active_player == schach::Color::White {
-        //     let (a,b,c,d) = brett.best_move(3); 
-        //     brett.move_piece(a, b, c, d);   
-        // } 
+        else if brett.active_player == schach::Color::Black {
+            let (a,b,c,d) = brett.best_move(3); 
+            brett.move_piece(a, b, c, d);   
+            //print_outcome(&brett);
+        } 
 
         for event in event_pump.poll_iter() {
             match event {

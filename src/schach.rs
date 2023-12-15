@@ -1,7 +1,7 @@
-use std::backtrace::BacktraceStatus;
-
 use rand::Rng;
 use rayon::prelude::*;
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Color {
@@ -68,13 +68,16 @@ impl Schach {
 
     fn get_all_legal_moves(&self) -> Vec<(u64, u64, u64, u64)> {
         let mut result = Vec::new();
+
         for x in 0..8 {
             for y in 0..8 {
-                for (a,b) in self.get_legal_moves(x, y, 1) {
+                let moves = self.get_legal_moves(x, y, 1);
+                for (a,b) in moves {
                     result.push((x,y, a as u64,b as u64));
                 }
             }
         }
+        result.shuffle(&mut thread_rng());
         result
     }
 
@@ -90,7 +93,7 @@ impl Schach {
         }
 
         if maximizing_player {
-            let mut max_eval = f32::MIN;
+            let mut max_eval = f32::NEG_INFINITY;
             for (a,b,c,d) in self.get_all_legal_moves() {
                 let mut brett = self.clone();
                 brett.move_piece(a, b, c, d);
@@ -103,7 +106,7 @@ impl Schach {
             } 
             return max_eval;
         } else {
-            let mut min_eval = f32::MAX;
+            let mut min_eval = f32::INFINITY;
             for (a,b,c,d) in self.get_all_legal_moves() {
                 let mut brett = self.clone();
                 brett.move_piece(a, b, c, d);
@@ -120,8 +123,7 @@ impl Schach {
 
 
     pub fn best_move(&self, depth: u64) -> (u64,u64,u64,u64) {
-        let mut best = -1000.0;
-        let mut best_move = (0,0,0,0);
+        let mut best = f32::MIN;
         
         let maximizing_player = match self.active_player {
             Color::Black => true,
@@ -131,16 +133,17 @@ impl Schach {
             Color::Black => -1.0,
             Color::White =>  1.0,
         };
-        
+        let all_moves = self.get_all_legal_moves();
+        let mut best_move = all_moves[0];
         let mut moves: Vec<(f32,u64,u64,u64,u64)> = Vec::new();
-        self.get_all_legal_moves()
-            .par_iter()
+        all_moves.par_iter()
             .map(|(a,b,c,d)| {
                 let mut rng = rand::thread_rng(); 
                 let mut brett = self.clone();
                 brett.move_piece(*a, *b, *c, *d);
-                let eval = factor *  brett.minmax(depth, f32::MIN, f32::MAX, maximizing_player);
-                (eval + rng.gen::<f32>() * 0.1,*a,*b,*c,*d)
+                let eval = factor *  brett.minmax(depth, f32::NEG_INFINITY, f32::INFINITY, maximizing_player);
+                let rand = -0.05 + rng.gen::<f32>() * 0.1;
+                (eval + rand ,*a,*b,*c,*d)
             }).collect_into_vec(&mut moves);
             
         for (f,a,b,c,d) in moves {
@@ -302,13 +305,18 @@ impl Schach {
         brett.move_piece(from_x, from_y, to_x, to_y);
         let (king_x, king_y) = brett.get_king_pos(c);
 
-        for x in 0..8 {
-            for y in 0..8 {
-                let moves = brett.get_legal_moves(x, y, 0);
+        let dirs = [(0,1),(0,-1),(1,0),(-1,0),(1,1),(1,-1),(-1,-1),(-1,1)];
+        for (d_x,d_y) in dirs {
+            let mut x = king_x + d_x;
+            let mut y = king_y + d_y;
+            while x >= 0 && y >= 0 && x < 8 && y < 8 {
+                let moves = brett.get_legal_moves(x as u64, y as u64, 0);
                 if moves.contains(&(king_x, king_y)) {
                     return false;
                 }
-            }
+                x += d_x;
+                y += d_y; 
+            }           
         }
         true
     }
