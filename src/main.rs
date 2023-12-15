@@ -55,16 +55,16 @@ pub fn main() -> Result<(), String> {
     'running: loop {
         canvas.clear();
 
-        // if brett.active_player == schach::Color::Black {
-        //     let (a,b,c,d) = brett.best_move(3); 
-        //     brett.move_piece(a, b, c, d);
+        if brett.active_player == schach::Color::Black {
+            let (a,b,c,d) = brett.best_move(2); 
+            brett.move_piece(a, b, c, d);
             
-        // } 
-        // else if brett.active_player == schach::Color::White {
-        //     let (a,b,c,d) = brett.best_move(3); 
-        //     brett.move_piece(a, b, c, d);
+        } 
+        else if brett.active_player == schach::Color::White {
+            let (a,b,c,d) = brett.best_move(2); 
+            brett.move_piece(a, b, c, d);
             
-        // } 
+        } 
         // print_outcome(&brett);
         // match brett.get_outcome() {
         //     Outcome::None => (),
@@ -219,7 +219,7 @@ pub fn main() -> Result<(), String> {
         }
         
         canvas.present();
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 200));
+        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
     }
     Ok(())
 }

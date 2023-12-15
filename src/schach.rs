@@ -115,17 +115,17 @@ impl Schach {
     pub fn alphabeta_negamax(&self, depth: u64, alpha: f32, beta: f32) -> f32 {
         let factor = match self.active_player {
             Color::Black => -1.0,
-            Color::White =>  1.0,
+            Color::White => 1.0,
         };
         if depth == 0 {
-            return self.eval_position() * factor;
+            return self.eval_position();
         }
         let mut v = alpha;
         for (a,b,c,d) in self.get_all_legal_moves() {
             let mut brett = self.clone();
             brett.move_piece(a as u64, b as u64, c as u64, d as u64);
-            v = v.max(brett.alphabeta_negamax(depth-1, -beta, -v));
-            if v > beta {
+            v = v.max(factor * brett.alphabeta_negamax(depth-1, -beta, -v));
+            if v > beta || v.abs() >= 100.0 {
                 return v;
             }
         }
@@ -135,10 +135,11 @@ impl Schach {
     pub fn eval_position(&self) -> f32 {
         match self.get_outcome() {
             Outcome::Checkmate(Color::White) => return 10000.0,
-            Outcome::Checkmate(Color::Black) => return -10000.0,
             Outcome::Stalemate => return 0.0,
             Outcome::None => (),
+            Outcome::Checkmate(Color::Black) => return -10000.0,
         }
+        let mut rng = rand::thread_rng();
         let mut eval = 0.0;
         for (c,p,_, _) in self.get_positions() {
             let value = match (&c,&p) {
@@ -157,7 +158,7 @@ impl Schach {
             };
             eval += value;
         }
-        eval
+        eval + rng.gen::<f32>() * 0.2
     }
 
     pub fn move_piece(&mut self, from_x: u64, from_y: u64, to_x: u64, to_y: u64) {
@@ -265,11 +266,11 @@ impl Schach {
 
     }
 
-    fn log2(&self, x: u64) -> u64 {
-        63 - x.leading_zeros() as u64
+    fn log2(&self, x: u64) -> i32 {
+        63 - x.leading_zeros() as i32
     }
 
-    pub fn get_king_pos(&self, c: &Color) -> (u64,u64) {
+    pub fn get_king_pos(&self, c: &Color) -> (i32,i32) {
         let bin_log = match c {
             Color::White => self.log2(self.white_king),
             Color::Black => self.log2(self.black_king),
@@ -285,7 +286,7 @@ impl Schach {
         for x in 0..8 {
             for y in 0..8 {
                 let moves = brett.get_legal_moves(x, y, 0);
-                if moves.contains(&(king_x as i32, king_y as i32)) {
+                if moves.contains(&(king_x, king_y)) {
                     return false;
                 }
             }
