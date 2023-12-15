@@ -8,6 +8,7 @@ use sdl2::keyboard::Keycode;
 use std::time::Duration;
 use sdl2::rect::Rect;
 use sdl2::rect::Point;
+use std::time::SystemTime;
 
 pub mod texture_manager;
 pub mod schach;
@@ -65,17 +66,18 @@ pub fn main() -> Result<(), String> {
                 ::std::thread::sleep(Duration::new(3, 0));
             },
         }
-        selected_squares.clear();
-        if brett.active_player == schach::Color::White {
-            let (a,b,c,d) = brett.best_move(4); 
+        if brett.active_player == schach::Color::Black {
+            selected_squares.clear();
+            let (a,b,c,d) = brett.best_move(3, SystemTime::now()); 
             selected_squares.push((a as i32,b as i32));
             selected_squares.push((c as i32,d as i32));
             brett.move_piece(a, b, c, d);
             //print_outcome(&brett);
             
         } 
-        else if brett.active_player == schach::Color::Black {
-            let (a,b,c,d) = brett.best_move(4); 
+        else if brett.active_player == schach::Color::White {
+            selected_squares.clear();
+            let (a,b,c,d) = brett.best_move(3, SystemTime::now()); 
             selected_squares.push((a as i32,b as i32));
             selected_squares.push((c as i32,d as i32));
             brett.move_piece(a, b, c, d);   

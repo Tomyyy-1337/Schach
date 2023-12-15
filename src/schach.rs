@@ -1,4 +1,4 @@
-use rand::Rng;
+use std::time::{Duration, SystemTime};
 use rayon::prelude::*;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
@@ -69,14 +69,12 @@ impl Schach {
     }
 
     fn get_all_legal_moves(&self) -> Vec<(u64, u64, u64, u64)> {
-        let mut result = Vec::new();
-
+        let mut result: Vec<(u64, u64, u64, u64)> = Vec::new();
+        
         for x in 0..8 {
             for y in 0..8 {
-                let moves = self.get_legal_moves(x, y, 1);
-                for (a,b) in moves {
-                    result.push((x,y, a as u64,b as u64));
-                }
+                let mut m: Vec<(u64, u64, u64, u64)> = self.get_legal_moves(x, y, 1).iter().map(| (a,b) | (x,y,*a as u64, *b as u64)).collect();
+                result.append(&mut m);
             }
         }
         result.shuffle(&mut thread_rng());
@@ -124,7 +122,8 @@ impl Schach {
     }   
 
 
-    pub fn best_move(&self, depth: u64) -> (u64,u64,u64,u64) {
+    pub fn best_move(&self, depth: u64, start: SystemTime) -> (u64,u64,u64,u64) {
+        // println!("Suchtiefe: {}",&depth);
         let mut best = f32::MIN;
         
         let maximizing_player = match self.active_player {
@@ -140,13 +139,15 @@ impl Schach {
         let mut moves: Vec<(f32,u64,u64,u64,u64)> = Vec::new();
         all_moves.par_iter()
             .map(|(a,b,c,d)| {
-                let mut rng = rand::thread_rng(); 
                 let mut brett = self.clone();
                 brett.move_piece(*a, *b, *c, *d);
                 let eval = factor *  brett.minmax(depth, f32::NEG_INFINITY, f32::INFINITY, maximizing_player);
-                let rand = -0.05 + rng.gen::<f32>() * 0.1;
-                (eval + rand ,*a,*b,*c,*d)
+                (eval ,*a,*b,*c,*d)
             }).collect_into_vec(&mut moves);
+
+        if SystemTime::now() < start + Duration::new(0,1_000_000_000/3) {
+            return self.best_move(depth+1, start);
+        }
             
         for (f,a,b,c,d) in moves {
             if f > best {
@@ -154,6 +155,7 @@ impl Schach {
                 best_move = (a,b,c,d);
             }
         }
+        
         best_move
     }
 
@@ -189,7 +191,7 @@ impl Schach {
         self.en_passant = None;
         self.fifty_move += 1;
 
-        if let Some((mut p_f,c_f)) = self.get_piece_at(from_x, from_y) {
+        if let Some((p_f,c_f)) = self.get_piece_at(from_x, from_y) {
             // Update En-Passant und 50 move
             if p_f == Piece::Pawn {
                 self.fifty_move = 0;
@@ -197,9 +199,7 @@ impl Schach {
                     self.en_passant = match c_f { 
                         Color::White => Some((to_x as i32, to_y as i32 + 1)),
                         Color::Black => Some((to_x as i32, to_y as i32 - 1)),
-                    }
-                } else if to_y == 7 || to_y == 0 {
-                    p_f = Piece::Queen; 
+                    };
                 }
             }
 
@@ -208,40 +208,46 @@ impl Schach {
                 self.castle -= 1 << (from_x + 8 * from_y);
             }
 
-            // Move Piece
-            match self.get_piece_at(to_x, to_y) {
-                Some((p_t,c_t)) => {
-                    self.fifty_move = 0;
+            if let Some((p_t,c_t)) = self.get_piece_at(to_x, to_y) {
+                self.fifty_move = 0;
+                if p_f == Piece::Pawn && (to_y == 7 || to_y == 0) { 
+                    self.remove_piece_at(&p_t, &c_t, to_x, to_x);
+                    self.set_piece(&Piece::Queen, &c_f, to_x, to_y);
+                    self.remove_piece_at(&p_f, &c_f, from_x, from_y);
+                } else {
                     self.remove_piece_at(&p_t, &c_t, to_x, to_y);
                     self.set_piece(&p_f, &c_f, to_x, to_y);
                     self.remove_piece_at(&p_f, &c_f, from_x, from_y);
-                },
-                None => {
-                    // Castle Ausführen 
-                    if p_f == Piece::King && (to_x as i32 - from_x as i32).abs() == 2 {
-                        self.set_piece(&p_f, &c_f, to_x, to_y);
-                        self.remove_piece_at(&p_f, &c_f, from_x, from_y);
-                        if to_x as i32 - from_x as i32 == 2 {
-                            self.set_piece(&Piece::Rook, &c_f, to_x - 1, to_y);
-                            self.remove_piece_at(&Piece::Rook, &c_f, from_x + 3, from_y);
-                        } else {
-                            self.set_piece(&Piece::Rook, &c_f, to_x + 1, to_y);
-                            self.remove_piece_at(&Piece::Rook, &c_f, from_x - 4, from_y);
-                        }
-                    }
-                    // En-passant zug ausführen
-                    if p_f == Piece::Pawn && (to_x as i32 - from_x as i32).abs() == 1 {
-                        self.remove_piece_at(&p_f, &c_f, from_x, from_y);
-                        match c_f {
-                            Color::White => self.remove_at(to_x, to_y + 1),
-                            Color::Black => self.remove_at(to_x, to_y - 1),
-                        }
-                        self.set_piece(&p_f, &c_f, to_x, to_y);
+                }
+            } else {
+                if p_f == Piece::Pawn && (to_y == 7 || to_y == 0) { 
+                    self.set_piece(&Piece::Queen, &c_f, to_x, to_y);
+                    self.remove_piece_at(&p_f, &c_f, from_x, from_y);
+                }
+                // Castle Ausführen 
+                 else if p_f == Piece::King && (to_x as i32 - from_x as i32).abs() == 2 {
+                    self.set_piece(&p_f, &c_f, to_x, to_y);
+                    self.remove_piece_at(&p_f, &c_f, from_x, from_y);
+                    if to_x as i32 - from_x as i32 == 2 {
+                        self.set_piece(&Piece::Rook, &c_f, to_x - 1, to_y);
+                        self.remove_piece_at(&Piece::Rook, &c_f, from_x + 3, from_y);
                     } else {
-                        self.set_piece(&p_f, &c_f, to_x, to_y);
-                        self.remove_piece_at(&p_f, &c_f, from_x, from_y);
+                        self.set_piece(&Piece::Rook, &c_f, to_x + 1, to_y);
+                        self.remove_piece_at(&Piece::Rook, &c_f, from_x - 4, from_y);
                     }
-                },
+                }
+                else if p_f == Piece::Pawn && (to_x as i32 - from_x as i32).abs() == 1 {
+                    // En-passant zug ausführen
+                    self.remove_piece_at(&p_f, &c_f, from_x, from_y);
+                    match c_f {
+                        Color::White => self.remove_at(to_x, to_y + 1),
+                        Color::Black => self.remove_at(to_x, to_y - 1),
+                    }
+                    self.set_piece(&p_f, &c_f, to_x, to_y);
+                } else {
+                    self.set_piece(&p_f, &c_f, to_x, to_y);
+                    self.remove_piece_at(&p_f, &c_f, from_x, from_y);
+                }
             }
 
             // Update active player
