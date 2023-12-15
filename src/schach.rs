@@ -43,6 +43,7 @@ pub struct Schach {
     white_rooks: u64,
     castle: u64,
     en_passant: Option<(i32,i32)>,
+    fifty_move: u32,
 }
 
 impl Schach {
@@ -63,6 +64,7 @@ impl Schach {
             white_rooks   : 0b10000001_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
             castle        : 0b10010001_00000000_00000000_00000000_00000000_00000000_00000000_10010001,
             en_passant    : None,
+            fifty_move    : 0, 
         }
     }
 
@@ -185,10 +187,12 @@ impl Schach {
 
     pub fn move_piece(&mut self, from_x: u64, from_y: u64, to_x: u64, to_y: u64) {
         self.en_passant = None;
+        self.fifty_move += 1;
 
         if let Some((mut p_f,c_f)) = self.get_piece_at(from_x, from_y) {
             // Update En-Passant
             if p_f == Piece::Pawn {
+                self.fifty_move = 0;
                 if (to_y as i32 - from_y as i32).abs() == 2 {
                     self.en_passant = match c_f { 
                         Color::White => Some((to_x as i32, to_y as i32 + 1)),
@@ -207,6 +211,7 @@ impl Schach {
             // Move Piece
             match self.get_piece_at(to_x, to_y) {
                 Some(_) => {
+                    self.fifty_move = 0;
                     self.remove_piece(to_x, to_y);
                     self.set_piece(&p_f, &c_f, to_x, to_y);
                     self.remove_piece(from_x, from_y);
@@ -266,6 +271,10 @@ impl Schach {
     }
 
     pub fn get_outcome(&self) -> Outcome {
+        if self.fifty_move >= 50 ||  0 == self.white_bishops + self.white_queen + self.white_rooks + self.white_pawns + self.black_bishops + self.black_queen + self.black_rooks + self.black_pawns {
+            return Outcome::Stalemate;
+        }
+
         let attacked_squares = self.atacked_squares_bitmap();
         let aktive_king = match self.active_player { Color::White => self.white_king, Color::Black => self.black_king};
         let opponent = match self.active_player { Color::White => Color::Black, Color::Black => Color::White};
@@ -276,6 +285,7 @@ impl Schach {
                 legal_moves += self.get_legal_moves(x, y, 1).len();
             }
         }
+
         if legal_moves == 0 {
             if is_check {
                 Outcome::Checkmate(opponent)
@@ -285,7 +295,6 @@ impl Schach {
         } else {
             Outcome::None
         }
-
     }
 
     fn log2(&self, x: u64) -> i32 {

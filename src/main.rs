@@ -60,6 +60,7 @@ pub fn main() -> Result<(), String> {
             _ => {
                 print_outcome(&brett);
                 brett = Schach::new();
+                ::std::thread::sleep(Duration::new(3, 0));
             },
         }
         if brett.active_player == schach::Color::White {
@@ -220,7 +221,7 @@ pub fn main() -> Result<(), String> {
         }
         
         canvas.present();
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
+        //::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
     }
     Ok(())
 }
