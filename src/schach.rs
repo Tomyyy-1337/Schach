@@ -324,11 +324,21 @@ impl Schach {
                 if moves.contains(&(king_x, king_y)) {
                     return false;
                 }
+                if 1 << (x + 8 * y) & self.all_pieces_of_color(&brett.active_player) != 0 {
+                    break;
+                }
                 x += d_x;
                 y += d_y; 
             }           
         }
         true
+    }
+
+    fn all_pieces_of_color(&self, c: &Color) -> u64 {
+        match c {
+            Color::White => self.white_bishops + self.white_knights + self.white_queen + self.white_rooks + self.white_pawns + self.white_king,
+            Color::Black => self.black_bishops + self.black_knights + self.black_queen + self.black_rooks + self.black_pawns + self.black_king,
+        }
     }
 
     // Gibt eine bitmap der vom gegner attakierten Felder zurück
@@ -345,9 +355,7 @@ impl Schach {
             for y in 0..8 {
                 let moves = brett.get_legal_moves(x, y, 0);
                 for (x_m,y_m) in moves {
-                    if bitmap & 1 << (x_m + 8 * y_m) as u64 == 0 {
-                        bitmap += 1 << (x_m + 8 * y_m) as u64;
-                    }
+                    bitmap |= 1 << (x_m + 8 * y_m) as u64;
                 }
             }
         }
@@ -472,14 +480,9 @@ impl Schach {
         result
     }
     
-    fn set_piece(&mut self, p: &Piece, c: &Color, x: u64, y: u64) -> bool {        
+    fn set_piece(&mut self, p: &Piece, c: &Color, x: u64, y: u64) {        
         let position:u64 = 1 << (x + 8 * y);
-        
-        if let Some((_,c_tmp)) = self.get_piece_at(x, y) {
-            if c_tmp == *c {
-                return false;
-            }
-        }
+    
         match (p, c) {
             (Piece::King, Color::White) =>   self.white_king |= position,
             (Piece::King, Color::Black) =>   self.black_king |= position,
@@ -494,7 +497,6 @@ impl Schach {
             (Piece::Pawn, Color::White) =>   self.white_pawns |= position,
             (Piece::Pawn, Color::Black) =>   self.black_pawns |= position,
         }
-        true
     }
 
     fn remove_at(&mut self ,x: u64,y: u64) {
@@ -519,30 +521,26 @@ impl Schach {
 
     fn remove_piece_at(&mut self , piece: &Piece, color: &Color,x: u64,y: u64) {
         let position:u64 = 1 << (x + 8 * y);
-        let bitmap_ptr: &mut u64 = match (piece, color) {
-            (Piece::King, Color::White) =>   &mut self.white_king,
-            (Piece::King, Color::Black) =>   &mut self.black_king,
-            (Piece::Queen, Color::White) =>  &mut self.white_queen, 
-            (Piece::Queen, Color::Black) =>  &mut self.black_queen,
-            (Piece::Rook, Color::White) =>   &mut self.white_rooks, 
-            (Piece::Rook, Color::Black) =>   &mut self.black_rooks, 
-            (Piece::Bishop, Color::White) => &mut self.white_bishops,
-            (Piece::Bishop, Color::Black) => &mut self.black_bishops,
-            (Piece::Knight, Color::White) => &mut self.white_knights,
-            (Piece::Knight, Color::Black) => &mut self.black_knights,
-            (Piece::Pawn, Color::Black) =>   &mut self.black_pawns,
-            (Piece::Pawn, Color::White) =>   &mut self.white_pawns, 
-        };
-        if *bitmap_ptr & position != 0 {
-            *bitmap_ptr -= position;
-        }
-        
+        match (piece, color) {
+            (Piece::King, Color::White)   => self.white_king    &= !position,
+            (Piece::King, Color::Black)   => self.black_king    &= !position,
+            (Piece::Queen, Color::White)  => self.white_queen   &= !position,
+            (Piece::Queen, Color::Black)  => self.black_queen   &= !position,
+            (Piece::Rook, Color::White)   => self.white_rooks   &= !position,
+            (Piece::Rook, Color::Black)   => self.black_rooks   &= !position,
+            (Piece::Bishop, Color::White) => self.white_bishops &= !position,
+            (Piece::Bishop, Color::Black) => self.black_bishops &= !position,
+            (Piece::Knight, Color::White) => self.white_knights &= !position,
+            (Piece::Knight, Color::Black) => self.black_knights &= !position,
+            (Piece::Pawn, Color::White)   => self.white_pawns   &= !position,
+            (Piece::Pawn, Color::Black)   => self.black_pawns   &= !position,
+        }   
     }
 
 
     fn get_piece_at(&self, x: u64, y: u64) -> Option<(Piece, Color)> {
         let pos = x + 8 * y;
-        let pieces = [ (self.black_pawns, Piece::Pawn, Color::Black), (self.white_pawns, Piece::Pawn, Color::White), (self.black_bishops, Piece::Bishop, Color::Black), (self.white_bishops, Piece::Bishop, Color::White), (self.black_king, Piece::King, Color::Black), (self.white_king, Piece::King, Color::White), (self.black_knights, Piece::Knight, Color::Black), (self.white_knights, Piece::Knight, Color::White), (self.black_queen, Piece::Queen, Color::Black), (self.white_queen, Piece::Queen, Color::White), (self.black_rooks, Piece::Rook, Color::Black), (self.white_rooks, Piece::Rook, Color::White),];
+        let pieces = [ (self.black_pawns, Piece::Pawn, Color::Black), (self.white_pawns, Piece::Pawn, Color::White), (self.black_bishops, Piece::Bishop, Color::Black), (self.white_bishops, Piece::Bishop, Color::White), (self.black_knights, Piece::Knight, Color::Black), (self.white_knights, Piece::Knight, Color::White), (self.black_rooks, Piece::Rook, Color::Black), (self.white_rooks, Piece::Rook, Color::White), (self.black_king, Piece::King, Color::Black), (self.white_king, Piece::King, Color::White), (self.black_queen, Piece::Queen, Color::Black), (self.white_queen, Piece::Queen, Color::White),];
 
         for (bitboard, piece, color) in pieces {
             if bitboard >> pos & 1 == 1 {

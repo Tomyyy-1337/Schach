@@ -65,14 +65,19 @@ pub fn main() -> Result<(), String> {
                 ::std::thread::sleep(Duration::new(3, 0));
             },
         }
+        selected_squares.clear();
         if brett.active_player == schach::Color::White {
             let (a,b,c,d) = brett.best_move(4); 
+            selected_squares.push((a as i32,b as i32));
+            selected_squares.push((c as i32,d as i32));
             brett.move_piece(a, b, c, d);
             //print_outcome(&brett);
             
         } 
         else if brett.active_player == schach::Color::Black {
             let (a,b,c,d) = brett.best_move(4); 
+            selected_squares.push((a as i32,b as i32));
+            selected_squares.push((c as i32,d as i32));
             brett.move_piece(a, b, c, d);   
             //print_outcome(&brett);
         } 
