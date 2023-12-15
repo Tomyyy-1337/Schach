@@ -1,3 +1,6 @@
+use rand::Rng;
+use rayon::prelude::*;
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Color {
     White,
@@ -22,7 +25,7 @@ pub enum Outcome {
 
 #[derive(Clone)]
 pub struct Schach {
-    active_player: Color,
+    pub active_player: Color,
     black_pawns: u64,
     white_pawns: u64,
     black_king:  u64,
@@ -60,31 +63,99 @@ impl Schach {
         }
     }
 
-    pub fn find_best_move(&self) -> Option<(i32,i32)>{
-        None
+    fn get_all_legal_moves(&self) -> Vec<(u64, u64, u64, u64)> {
+        let mut result = Vec::new();
+        for x in 0..8 {
+            for y in 0..8 {
+                for (a,b) in self.get_legal_moves(x, y, 1) {
+                    result.push((x,y, a as u64,b as u64));
+                }
+            }
+        }
+        result
     }
 
-    pub fn eval(&self, active_c: &Color) -> i32 {
-        let mut eval = 0;
+
+
+    pub fn best_move(&self, depth: u64) -> (u64,u64,u64,u64) {
+        let mut best = -1000.0;
+        let mut best_move = (0,0,0,0);
+
+        let mut moves: Vec<(f32,u64,u64,u64,u64)> = Vec::new();
+
+        self.get_all_legal_moves()
+            .par_iter()
+            .map(|(a,b,c,d)| {
+                let mut brett = self.clone();
+                brett.move_piece(*a, *b, *c, *d);
+                let eval = brett.alphabeta_negamax(depth, -1000.0, 1000.0);
+                (eval,*a,*b,*c,*d)
+            }).collect_into_vec(&mut moves);
+            
+        for (f,a,b,c,d) in moves {
+            if f > best {
+                best = f;
+                best_move = (a,b,c,d);
+            }
+        }
+        best_move
+
+        // for (a,b,c,d) in self.get_all_legal_moves() {
+        //     let mut brett = self.clone();
+        //     brett.move_piece(a as u64, b as u64, c as u64, d as u64);
+        //     let eval = brett.alphabeta_negamax(depth, -1000.0, 1000.0);
+        //     if eval > best {
+        //         best = eval;
+        //         best_move = (a,b,c,d);
+        //     }
+        // }
+        // best_move
+    }
+
+    pub fn alphabeta_negamax(&self, depth: u64, alpha: f32, beta: f32) -> f32 {
+        let factor = match self.active_player {
+            Color::Black => -1.0,
+            Color::White =>  1.0,
+        };
+        if depth == 0 {
+            return self.eval_position() * factor;
+        }
+        let mut v = alpha;
+        for (a,b,c,d) in self.get_all_legal_moves() {
+            let mut brett = self.clone();
+            brett.move_piece(a as u64, b as u64, c as u64, d as u64);
+            v = v.max(brett.alphabeta_negamax(depth-1, -beta, -v));
+            if v > beta {
+                return v;
+            }
+        }
+        v
+    }
+
+    pub fn eval_position(&self) -> f32 {
+        match self.get_outcome() {
+            Outcome::Checkmate(Color::White) => return 10000.0,
+            Outcome::Checkmate(Color::Black) => return -10000.0,
+            Outcome::Stalemate => return 0.0,
+            Outcome::None => (),
+        }
+        let mut eval = 0.0;
         for (c,p,_, _) in self.get_positions() {
             let value = match (&c,&p) {
-                (Color::White, Piece::King) => 100,
-                (Color::White, Piece::Queen) => 9,
-                (Color::White, Piece::Rook) => 5,
-                (Color::White, Piece::Bishop) => 3,
-                (Color::White, Piece::Knight) => 3,
-                (Color::White, Piece::Pawn) => 1,
-                (Color::Black, Piece::King) => -100,
-                (Color::Black, Piece::Queen) => -9,
-                (Color::Black, Piece::Rook) => -5,
-                (Color::Black, Piece::Bishop) => -3,
-                (Color::Black, Piece::Knight) => -3,
-                (Color::Black, Piece::Pawn) => -1,
+                (Color::White, Piece::King) => 100.0,
+                (Color::White, Piece::Queen) => 9.0,
+                (Color::White, Piece::Rook) => 5.0,
+                (Color::White, Piece::Bishop) => 3.0,
+                (Color::White, Piece::Knight) => 3.0,
+                (Color::White, Piece::Pawn) => 1.0,
+                (Color::Black, Piece::King) => -100.0,
+                (Color::Black, Piece::Queen) => -9.0,
+                (Color::Black, Piece::Rook) => -5.0,
+                (Color::Black, Piece::Bishop) => -3.0,
+                (Color::Black, Piece::Knight) => -3.0,
+                (Color::Black, Piece::Pawn) => -1.0,
             };
-            match &active_c {
-                Color::White => eval += value,
-                Color::Black => eval -= value,
-            };
+            eval += value;
         }
         eval
     }

@@ -55,6 +55,22 @@ pub fn main() -> Result<(), String> {
     'running: loop {
         canvas.clear();
 
+        // if brett.active_player == schach::Color::Black {
+        //     let (a,b,c,d) = brett.best_move(3); 
+        //     brett.move_piece(a, b, c, d);
+            
+        // } 
+        // else if brett.active_player == schach::Color::White {
+        //     let (a,b,c,d) = brett.best_move(3); 
+        //     brett.move_piece(a, b, c, d);
+            
+        // } 
+        // print_outcome(&brett);
+        // match brett.get_outcome() {
+        //     Outcome::None => (),
+        //     _ => brett = Schach::new(),
+        // }
+
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit {..} |
@@ -110,8 +126,8 @@ pub fn main() -> Result<(), String> {
                                     let b = active_piece.unwrap().1;
                                     if brett.get_legal_moves(a as u64, b as u64, 1).contains(&(c,d)) {
                                         brett.move_piece(a as u64, b as u64, c as u64, d as u64);
+                                        println!("{}", brett.eval_position());
                                         print_outcome(&brett);
-                                        println!("{}", brett.eval(&schach::Color::White));
                                         selected_squares.clear();
                                         active_piece = None;
                                     }
@@ -126,6 +142,7 @@ pub fn main() -> Result<(), String> {
                                 let d = y / SQUARE_SIZE as i32;
                                 if brett.get_legal_moves(a as u64, b as u64, 1).contains(&(c,d)) {
                                     brett.move_piece(a as u64, b as u64, c as u64, d as u64);
+                                    println!("{}", brett.eval_position());
                                     print_outcome(&brett);
                                     selected_squares.clear();
                                 }
@@ -202,7 +219,7 @@ pub fn main() -> Result<(), String> {
         }
         
         canvas.present();
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 1000));
+        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 200));
     }
     Ok(())
 }
