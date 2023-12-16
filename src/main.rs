@@ -63,7 +63,7 @@ pub fn main() -> Result<(), String> {
             _ => {
                 print_outcome(&brett);
                 brett = Schach::new();
-                ::std::thread::sleep(Duration::new(3, 0));
+                ::std::thread::sleep(Duration::new(5, 0));
             },
         }
         if brett.active_player == schach::Color::Black {

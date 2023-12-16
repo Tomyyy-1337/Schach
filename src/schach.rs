@@ -88,7 +88,7 @@ impl Schach {
             Color::Black => Color::White,
             Color::White => Color::Black,
         };
-        if depth == 0 || brett.get_outcome() != Outcome::None {
+        if depth == 0 {
             return self.eval_position();
         }
 
@@ -97,7 +97,10 @@ impl Schach {
             for (a,b,c,d) in self.get_all_legal_moves() {
                 let mut brett = self.clone();
                 brett.move_piece(a, b, c, d);
-                let eval = brett.minmax(depth - 1, alpha, beta, false);
+                let eval = match brett.get_outcome() {
+                    Outcome::None => brett.minmax(depth - 1, alpha, beta, false),
+                    _ => brett.eval_position(), 
+                };
                 max_eval = max_eval.max(eval);
                 alpha = alpha.max(eval);
                 if beta <= alpha {
@@ -330,21 +333,11 @@ impl Schach {
                 if moves.contains(&(king_x, king_y)) {
                     return false;
                 }
-                if 1 << (x + 8 * y) & self.all_pieces_of_color(&brett.active_player) != 0 {
-                    break;
-                }
                 x += d_x;
                 y += d_y; 
             }           
         }
         true
-    }
-
-    fn all_pieces_of_color(&self, c: &Color) -> u64 {
-        match c {
-            Color::White => self.white_bishops + self.white_knights + self.white_queen + self.white_rooks + self.white_pawns + self.white_king,
-            Color::Black => self.black_bishops + self.black_knights + self.black_queen + self.black_rooks + self.black_pawns + self.black_king,
-        }
     }
 
     // Gibt eine bitmap der vom gegner attakierten Felder zurück
@@ -390,11 +383,15 @@ impl Schach {
                             let king_path:u64 = 0b00011100_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
                             let attacked = self.atacked_squares_bitmap();
                             if  collision & path == 0 && king_path & attacked == 0 && self.castle >> (x - 4 + 8 * y) & 1 == 1 {
-                                result.push((x as i32 - 2, y as i32));
+                                if tiefe == 0 || self.is_valid_move(&c, x, y, x-2, y) {
+                                    result.push((x as i32 - 2, y as i32));
+                                }
                             }
                             let path     = 0b01110000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
                             if collision & path == 0 && path & attacked == 0 && self.castle >> (x + 3 + 8 * y) & 1 == 1 {
-                                result.push((x as i32 + 2, y as i32));
+                                if tiefe == 0 || self.is_valid_move(&c, x, y, x + 2, y) {
+                                    result.push((x as i32 + 2, y as i32));
+                                }
                             }
                         },
                         Color::Black => {
@@ -402,11 +399,15 @@ impl Schach {
                             let king_path:u64 = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_00011100;
                             let attacked = self.atacked_squares_bitmap();
                             if  collision & path == 0 && king_path & attacked == 0 && self.castle >> (x - 4 + 8 * y) & 1 == 1 {
-                                result.push((x as i32 - 2, y as i32));
+                                if tiefe == 0 || self.is_valid_move(&c, x, y, x - 2 , y) {
+                                    result.push((x as i32 - 2, y as i32));
+                                }
                             }
                             let path     = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_01110000;
                             if collision & path == 0 && path & attacked == 0 && self.castle >> (x + 3 + 8 * y) & 1 == 1 {
-                                result.push((x as i32 + 2, y as i32));
+                                if tiefe == 0 || self.is_valid_move(&c, x, y, x, y) {
+                                    result.push((x as i32 + 2, y as i32));
+                                }
                             }
                         },
                     }
