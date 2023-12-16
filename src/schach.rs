@@ -97,10 +97,8 @@ impl Schach {
             for (a,b,c,d) in self.get_all_legal_moves() {
                 let mut brett = self.clone();
                 brett.move_piece(a, b, c, d);
-                let eval = match brett.get_outcome() {
-                    Outcome::None => brett.minmax(depth - 1, alpha, beta, false),
-                    _ => brett.eval_position(), 
-                };
+                match brett.get_outcome() { Outcome::None => () , _ => return brett.eval_position(),}
+                let eval = brett.minmax(depth - 1, alpha, beta, false);
                 max_eval = max_eval.max(eval);
                 alpha = alpha.max(eval);
                 if beta <= alpha {
@@ -148,7 +146,7 @@ impl Schach {
                 (eval ,*a,*b,*c,*d)
             }).collect_into_vec(&mut moves);
 
-        if SystemTime::now() < start + Duration::new(0,1_000_000_000/3) {
+        if SystemTime::now() < start + Duration::new(0,1_000_000_000/5) {
             return self.best_move(depth+1, start);
         }
             
@@ -335,6 +333,17 @@ impl Schach {
                 }
                 x += d_x;
                 y += d_y; 
+            }           
+        }
+        let dirs = [(2,1),(2,-1),(1,2),(-2,1),(-2,-1),(-1,2),(1,-2),(-1,-2)];
+        for (d_x,d_y) in dirs {
+            let x = king_x + d_x;
+            let y = king_y + d_y;
+            if x >= 0 && y >= 0 && x < 8 && y < 8 {
+                let moves = brett.get_legal_moves(x as u64, y as u64, 0);
+                if moves.contains(&(king_x, king_y)) {
+                    return false;
+                }
             }           
         }
         true
