@@ -69,7 +69,7 @@ pub fn main() -> Result<(), String> {
         if brett.active_player == schach::Color::Black {
             selected_squares.clear();
             let (a,b,c,d) = brett.best_move(3, SystemTime::now()); 
-            selected_squares.push((a as i32,b as i32));
+            selected_squares.push((a as i32,b as i32)); 
             selected_squares.push((c as i32,d as i32));
             brett.move_piece(a, b, c, d);
             //print_outcome(&brett);

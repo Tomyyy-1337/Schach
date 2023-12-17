@@ -146,8 +146,8 @@ impl Schach {
                 (eval ,*a,*b,*c,*d)
             }).collect_into_vec(&mut moves);
 
-        if SystemTime::now() < start + Duration::new(0,1_000_000_000/3) {
-            return self.best_move(depth+1, start);
+        if SystemTime::now() < start + Duration::new(0,1_000_000_000/5) {
+            return self.best_move(depth+2, start);
         }
             
         for (f,a,b,c,d) in moves {
