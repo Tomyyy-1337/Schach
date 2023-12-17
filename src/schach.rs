@@ -91,7 +91,7 @@ impl Schach {
             Outcome::Stalemate => {
                 return self.eval_position();
             }
-            _ =>  {
+            Outcome::Checkmate(_) =>  {
                 let bonus = match maximizing_player {
                     true  => -(depth as f32),
                     false => depth as f32,
@@ -196,6 +196,12 @@ impl Schach {
             };
             eval += value;
         }
+        if self.black_bishops << (self.black_bishops.leading_zeros() + 1) != 0 {
+            eval -= 1.0;
+        } else if self.white_bishops << (self.white_bishops.leading_zeros() + 1) != 0 {
+            eval += 1.0;
+        }
+
         eval 
     }
 
