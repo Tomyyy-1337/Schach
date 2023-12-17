@@ -83,13 +83,11 @@ impl Schach {
 
 
     pub fn minmax(&mut self, depth:u64, mut alpha: f32, mut beta: f32, maximizing_player: bool ) -> f32 {
-        let mut brett = self.clone();
-        brett.active_player = match brett.active_player {
-            Color::Black => Color::White,
-            Color::White => Color::Black,
-        };
         if depth == 0 {
             return self.eval_position();
+        }
+        match self.get_outcome() { 
+            Outcome::None => () , _ => return self.eval_position()
         }
 
         if maximizing_player {
@@ -97,14 +95,13 @@ impl Schach {
             for (a,b,c,d) in self.get_all_legal_moves() {
                 let mut brett = self.clone();
                 brett.move_piece(a, b, c, d);
-                match brett.get_outcome() { Outcome::None => () , _ => return brett.eval_position(),}
                 let eval = brett.minmax(depth - 1, alpha, beta, false);
                 max_eval = max_eval.max(eval);
                 alpha = alpha.max(eval);
                 if beta <= alpha {
                     break;
                 }
-            } 
+            }   
             return max_eval;
         } else {
             let mut min_eval = f32::INFINITY;
@@ -142,11 +139,14 @@ impl Schach {
             .map(|(a,b,c,d)| {
                 let mut brett = self.clone();
                 brett.move_piece(*a, *b, *c, *d);
-                let eval = factor *  brett.minmax(depth, f32::NEG_INFINITY, f32::INFINITY, maximizing_player);
+                let eval = match self.get_outcome() { 
+                    Outcome::None => factor *  brett.minmax(depth, f32::NEG_INFINITY, f32::INFINITY, maximizing_player),
+                    _             => factor * self.eval_position()
+                };
                 (eval ,*a,*b,*c,*d)
             }).collect_into_vec(&mut moves);
 
-        if SystemTime::now() < start + Duration::new(0,1_000_000_000/5) {
+        if SystemTime::now() < start + Duration::new(0,1_000_000_000/3) {
             return self.best_move(depth+1, start);
         }
             
@@ -189,10 +189,9 @@ impl Schach {
     }
 
     pub fn move_piece(&mut self, from_x: u64, from_y: u64, to_x: u64, to_y: u64) {
-        self.en_passant = None;
-        self.fifty_move += 1;
-
         if let Some((p_f,c_f)) = self.get_piece_at(from_x, from_y) {
+            self.en_passant = None;
+            self.fifty_move += 1;
             // Update En-Passant und 50 move
             if p_f == Piece::Pawn {
                 self.fifty_move = 0;
