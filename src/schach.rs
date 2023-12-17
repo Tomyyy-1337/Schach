@@ -87,7 +87,11 @@ impl Schach {
             return self.eval_position();
         }
         match self.get_outcome() { 
-            Outcome::None => () , _ =>  {
+            Outcome::None => () , 
+            Outcome::Stalemate => {
+                return self.eval_position();
+            }
+            _ =>  {
                 let bonus = match maximizing_player {
                     true  => -(depth as f32),
                     false => depth as f32,
@@ -147,7 +151,8 @@ impl Schach {
                 brett.move_piece(*a, *b, *c, *d);
                 let eval = match self.get_outcome() { 
                     Outcome::None => factor *  brett.minmax(depth, f32::NEG_INFINITY, f32::INFINITY, maximizing_player),
-                    _             => factor * self.eval_position() + depth as f32
+                    Outcome::Stalemate => factor * self.eval_position(),
+                    _ => factor * self.eval_position() + depth as f32
                 };
                 (eval ,*a,*b,*c,*d)
             }).collect_into_vec(&mut moves);

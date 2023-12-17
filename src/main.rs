@@ -173,13 +173,17 @@ pub fn main() -> Result<(), String> {
                 let y = j * SQUARE_SIZE;
                 
                 let color = if (i + j) % 2 == 0 && selected_squares.contains(&(i as i32, j as i32)) {
-                    Color::RGB(255, 150, 150)
+                    //Color::RGB(255, 150, 150)
+                    Color::RGB(36, 158, 108)
                 } else if (i + j) % 2 == 1 && selected_squares.contains(&(i as i32, j as i32)) {
-                    Color::RGB(100, 70, 30) 
+                    // Color::RGB(100, 70, 30) 
+                    Color::RGB(38, 89, 68)
                 } else if (i + j) % 2 == 0 {
-                    Color::RGB(255, 255, 255) 
+                    // Color::RGB(255, 255, 255) 
+                    Color::RGB(231,206,181)
                 } else {
-                    Color::RGB(20, 100, 20) 
+                    // Color::RGB(20, 100, 20) 
+                    Color::RGB(101,48,36)
                 };
                 canvas.set_draw_color(color);
                 canvas.fill_rect(sdl2::rect::Rect::new(x as i32, y as i32, SQUARE_SIZE, SQUARE_SIZE)).unwrap();
