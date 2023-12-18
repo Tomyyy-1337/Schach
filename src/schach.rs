@@ -1,9 +1,14 @@
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, SystemTime};
+use rayon::iter::IndexedParallelIterator;
 use rayon::prelude::*;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+use crate::lookup_table;
+// use chess_notation_parser::{self, Turn, CastlingType, Castling};
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Color {
     White,
     Black
@@ -26,7 +31,7 @@ pub enum Outcome {
     None,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Hash, Eq)]
 pub struct Schach {
     pub active_player: Color,
     black_pawns: u64,
@@ -82,21 +87,30 @@ impl Schach {
     }
 
 
-    pub fn minmax(&mut self, depth:u64, mut alpha: f32, mut beta: f32, maximizing_player: bool ) -> f32 {
+    pub fn minmax(self, depth:u64, mut alpha: f32, mut beta: f32, maximizing_player: bool, eval_map: &mut HashMap<Schach, f32> ) -> f32 {
+        if eval_map.contains_key(&self) {
+            return eval_map[&self];
+        }
         if depth == 0 {
-            return self.eval_position();
+            let eval = self.eval_position();   
+            eval_map.insert(self, eval);
+            return eval;
         }
         match self.get_outcome() { 
             Outcome::None => () , 
             Outcome::Stalemate => {
-                return self.eval_position();
+                let eval = self.eval_position();   
+                eval_map.insert(self, eval);
+                return eval;
             }
             Outcome::Checkmate(_) =>  {
                 let bonus = match maximizing_player {
-                    true  => -(depth as f32),
-                    false => depth as f32,
+                    true  => -(depth as f32) * 100.0,
+                    false => depth as f32 * 100.0,
                 };
-                return self.eval_position() + bonus
+                let eval = self.eval_position() + bonus;   
+                eval_map.insert(self, eval);
+                return eval;
             }
         }
 
@@ -105,7 +119,8 @@ impl Schach {
             for (a,b,c,d) in self.get_all_legal_moves() {
                 let mut brett = self.clone();
                 brett.move_piece(a, b, c, d);
-                let eval = brett.minmax(depth - 1, alpha, beta, false);
+                let eval = brett.minmax(depth - 1 ,alpha, beta, false, eval_map);
+                eval_map.insert(self.clone(), eval);
                 max_eval = max_eval.max(eval);
                 alpha = alpha.max(eval);
                 if beta <= alpha {
@@ -118,7 +133,8 @@ impl Schach {
             for (a,b,c,d) in self.get_all_legal_moves() {
                 let mut brett = self.clone();
                 brett.move_piece(a, b, c, d);
-                let eval = brett.minmax(depth - 1, alpha, beta, true);
+                let eval = brett.minmax(depth - 1, alpha, beta, true, eval_map);
+                eval_map.insert(self.clone(), eval);
                 min_eval = min_eval.min(eval);
                 beta = beta.min(eval);
                 if beta <= alpha {
@@ -130,8 +146,7 @@ impl Schach {
     }   
 
 
-    pub fn best_move(&self, depth: u64, start: SystemTime) -> (u64,u64,u64,u64) {
-        // println!("Suchtiefe: {}",&depth);
+    pub fn best_move(&self, depth: u64, start: SystemTime, lookup_table: &lookup_table::LookupTable) -> (u64,u64,u64,u64) {
         let mut best = f32::MIN;
         
         let maximizing_player = match self.active_player {
@@ -142,31 +157,36 @@ impl Schach {
             Color::Black => -1.0,
             Color::White =>  1.0,
         };
+        
         let all_moves = self.get_all_legal_moves();
         let mut best_move = all_moves[0];
         let mut moves: Vec<(f32,u64,u64,u64,u64)> = Vec::new();
         all_moves.par_iter()
-            .map(|(a,b,c,d)| {
-                let mut brett = self.clone();
-                brett.move_piece(*a, *b, *c, *d);
-                let eval = match self.get_outcome() { 
-                    Outcome::None => factor *  brett.minmax(depth, f32::NEG_INFINITY, f32::INFINITY, maximizing_player),
-                    Outcome::Stalemate => factor * self.eval_position(),
-                    _ => factor * self.eval_position() + depth as f32
-                };
-                (eval ,*a,*b,*c,*d)
-            }).collect_into_vec(&mut moves);
-
-        if SystemTime::now() < start + Duration::new(0,1_000_000_000/15) {
-            return self.best_move(depth+2, start);
+        .map(|(a,b,c,d)| {
+            let mut brett = self.clone();
+            brett.move_piece(*a, *b, *c, *d);
+            let eval = match self.get_outcome() { 
+                Outcome::Stalemate    => factor * self.eval_position(),
+                Outcome::Checkmate(_) => factor * self.eval_position() + depth as f32,
+                Outcome::None => {
+                    let mut eval_map:HashMap<Schach, f32>  = HashMap::new();
+                    factor *  brett.minmax(depth, f32::NEG_INFINITY, f32::INFINITY, maximizing_player, &mut eval_map)
+                },
+            };
+            (eval ,*a,*b,*c,*d)
+        }).collect_into_vec(&mut moves);
+        
+        if SystemTime::now() < start + Duration::new(0,1_000_000_000/3) && depth < 25 {
+            return self.best_move(depth+1,start, lookup_table);
         }
-            
-        for (f,a,b,c,d) in moves {
-            if f > best {
-                best = f;
+        
+        for (eval,a,b,c,d) in moves {
+            if eval > best {
+                best = eval;
                 best_move = (a,b,c,d);
             }
         }
+        println!("tiefe: {}, eval: {:.2}, time: {:?}", depth+1, factor * best, SystemTime::now().duration_since(start).unwrap());
         
         best_move
     }
@@ -196,12 +216,6 @@ impl Schach {
             };
             eval += value;
         }
-        if self.black_bishops << (self.black_bishops.leading_zeros() + 1) != 0 {
-            eval -= 1.0;
-        } else if self.white_bishops << (self.white_bishops.leading_zeros() + 1) != 0 {
-            eval += 1.0;
-        }
-
         eval 
     }
 
@@ -337,7 +351,7 @@ impl Schach {
         let mut brett = self.clone();
         brett.move_piece(from_x, from_y, to_x, to_y);
         let (king_x, king_y) = brett.get_king_pos(c);
-
+    
         let dirs = [(0,1),(0,-1),(1,0),(-1,0),(1,1),(1,-1),(-1,-1),(-1,1)];
         for (d_x,d_y) in dirs {
             let mut x = king_x + d_x;
@@ -386,11 +400,11 @@ impl Schach {
         bitmap
     }
 
-    pub fn get_legal_moves(&self, x: u64, y: u64, tiefe: u8) -> Vec<(i32, i32)> {
+    pub fn get_legal_moves(&self, x: u64, y: u64, tiefe: u8) -> HashSet<(i32, i32)> {
         let piece = self.get_piece_at(x, y);
         if let Some((_,c)) = &piece {
             if *c != self.active_player {
-                return Vec::new();
+                return HashSet::new();
             }
         }
         match piece {
@@ -409,13 +423,13 @@ impl Schach {
                             let attacked = self.atacked_squares_bitmap();
                             if  collision & path == 0 && king_path & attacked == 0 && self.castle >> (x - 4 + 8 * y) & 1 == 1 {
                                 if tiefe == 0 || self.is_valid_move(&c, x, y, x-2, y) {
-                                    result.push((x as i32 - 2, y as i32));
+                                    result.insert((x as i32 - 2, y as i32));
                                 }
                             }
                             let path     = 0b01110000_00000000_00000000_00000000_00000000_00000000_00000000_00000000;
                             if collision & path == 0 && path & attacked == 0 && self.castle >> (x + 3 + 8 * y) & 1 == 1 {
                                 if tiefe == 0 || self.is_valid_move(&c, x, y, x + 2, y) {
-                                    result.push((x as i32 + 2, y as i32));
+                                    result.insert((x as i32 + 2, y as i32));
                                 }
                             }
                         },
@@ -425,13 +439,13 @@ impl Schach {
                             let attacked = self.atacked_squares_bitmap();
                             if  collision & path == 0 && king_path & attacked == 0 && self.castle >> (x - 4 + 8 * y) & 1 == 1 {
                                 if tiefe == 0 || self.is_valid_move(&c, x, y, x - 2 , y) {
-                                    result.push((x as i32 - 2, y as i32));
+                                    result.insert((x as i32 - 2, y as i32));
                                 }
                             }
                             let path     = 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_01110000;
                             if collision & path == 0 && path & attacked == 0 && self.castle >> (x + 3 + 8 * y) & 1 == 1 {
                                 if tiefe == 0 || self.is_valid_move(&c, x, y, x, y) {
-                                    result.push((x as i32 + 2, y as i32));
+                                    result.insert((x as i32 + 2, y as i32));
                                 }
                             }
                         },
@@ -441,19 +455,19 @@ impl Schach {
                 result
             },
             Some((Piece::Pawn  , c)) => {
-                let mut result = Vec::new();
+                let mut result = HashSet::new();
                 let direction = match c { Color::White => -1, Color::Black => 1 };
                 let a = x as i32;
                 let mut b = y as i32 + direction;
                 if b < 8 && b >= 0 && self.get_piece_at(a as u64, b as u64).is_none() {
                     if tiefe == 0 || self.is_valid_move(&c, x, y, a as u64, b as u64) {
-                        result.push((a, b));
+                        result.insert((a, b));
                     }
                     if (c == Color::White && y == 6) || (c == Color::Black && y == 1) {
                         b += direction;
                         if b < 8 && b >= 0 && self.get_piece_at(a as u64, b as u64).is_none() {
                             if tiefe == 0 || self.is_valid_move(&c, x, y, a as u64, b as u64) {
-                                result.push((a, b));
+                                result.insert((a, b));
                             }
                         }
                     }
@@ -463,7 +477,7 @@ impl Schach {
                         if let Some((_,c_d)) = self.get_piece_at(a as u64, b as u64) {
                             if c != c_d {
                                 if tiefe == 0 || self.is_valid_move(&c, x, y, a as u64, b as u64) {
-                                    result.push((a, b));
+                                    result.insert((a, b));
                                 }
                             }
                         }
@@ -474,19 +488,19 @@ impl Schach {
                     for a in [x as i32 + 1, x as i32 - 1] {
                         if (a,b) == pos {
                             if tiefe == 0 || self.is_valid_move(&c, x, y, a as u64, b as u64) {
-                                result.push((a,b));
+                                result.insert((a,b));
                             }
                         } 
                     }
                 }
                 result
             },
-            None => Vec::new(),
+            None => HashSet::new(),
         }
     }
 
-    fn generate_moves(&self,c: &Color, x: u64, y:u64 ,range: u8, tiefe: u8, moves: Vec<(i32,i32)>) -> Vec<(i32, i32)> {
-        let mut result = Vec::new();
+    fn generate_moves(&self, c: &Color, x: u64, y:u64 ,range: u8, tiefe: u8, moves: Vec<(i32,i32)>) -> HashSet<(i32, i32)> {
+        let mut result = HashSet::new();
         for m in moves {
             let mut a = x as i32;
             let mut b = y as i32;
@@ -496,16 +510,15 @@ impl Schach {
                 if a >= 8 || b >= 8 || a < 0 || b < 0 {
                     break;
                 }
+                let valid_move = tiefe == 0 || self.is_valid_move(&c, x, y, a as u64, b as u64);
                 if let Some((_, p_c)) = self.get_piece_at(a as u64, b as u64) {
-                    if p_c != *c {
-                        if tiefe == 0 || self.is_valid_move(&c, x, y, a as u64, b as u64) {
-                            result.push((a, b));
-                        }
-                    } 
+                    if p_c != *c && valid_move {
+                        result.insert((a, b));
+                    }
                     break;
                 } 
-                if tiefe == 0 || self.is_valid_move(&c, x, y, a as u64, b as u64) {
-                    result.push((a, b));
+                if valid_move {
+                    result.insert((a, b));
                 }
             }  
         }

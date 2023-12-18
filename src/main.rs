@@ -5,21 +5,26 @@ use sdl2::mouse::MouseButton;
 use sdl2::pixels::Color;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use std::time::Duration;
 use sdl2::rect::Rect;
 use sdl2::rect::Point;
+use std::collections::HashSet;
 use std::time::SystemTime;
-
+use std::time::Duration;
+use std::thread;
+use std::sync::mpsc;
 pub mod texture_manager;
 pub mod schach;
+pub mod lookup_table;
 
 const SQUARE_SIZE:u32 = 100;
 
 pub fn main() -> Result<(), String> {
-    rayon::ThreadPoolBuilder::new().num_threads(16).build_global().unwrap();
+    let lookup_table: lookup_table::LookupTable = lookup_table::LookupTable::new();
+
+    rayon::ThreadPoolBuilder::new().num_threads(18).build_global().unwrap();
 
     let mut brett = Schach::new();
-
+    
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
 
@@ -49,40 +54,52 @@ pub fn main() -> Result<(), String> {
     let sdl_context = sdl2::init().unwrap();
 
     let mut event_pump = sdl_context.event_pump().unwrap();
-    let mut selected_squares: Vec<(i32, i32)> = Vec::new();
+    let mut selected_squares: HashSet<(i32, i32)> = HashSet::new();
     let mut active_piece: Option<(i32, i32)> = None;
     let mut arrows: Vec<(i32, i32, i32, i32)> = Vec::new();
     let mut start_pos_right: Option<(i32, i32)> = None; 
     let mut start_pos_left: Option<(i32, i32)> = None; 
+    
+    let mut calulation_running = false;
+    let mut calculation_end = SystemTime::now();
+    let mut rx: mpsc::Receiver<(u64, u64, u64, u64)> = mpsc::channel().1;
+    let mut tx: mpsc::Sender<(u64, u64, u64, u64)>;
 
     'running: loop {
+
         canvas.clear();
-        
+
         match brett.get_outcome() {
-            schach::Outcome::None => (),
+            schach::Outcome::None => {
+                if let Ok((a,b,c,d)) = rx.try_recv() {
+                    calculation_end = SystemTime::now();
+                    calulation_running = false;
+                    selected_squares.clear();
+                    arrows.clear();
+                    selected_squares.insert((a as i32,b as i32)); 
+                    selected_squares.insert((c as i32,d as i32));
+                    brett.move_piece(a, b, c, d);
+                } else if !calulation_running {
+                    calulation_running = true;
+                    (tx, rx) = std::sync::mpsc::channel();
+                    let brett_clone: Schach = brett.clone();
+                    let lookup_table_clone: lookup_table::LookupTable = lookup_table.clone();
+                    thread::spawn(move || {
+                        let (a,b,c,d) = brett_clone.best_move(3, SystemTime::now(), &lookup_table_clone); 
+                        tx.send((a,b,c,d)).unwrap();
+                    });
+                }
+            },
             _ => {
-                print_outcome(&brett);
-                brett = Schach::new();
-                ::std::thread::sleep(Duration::new(5, 0));
+                if calculation_end.elapsed().unwrap().as_secs() > 5 {
+                    selected_squares.clear();
+                    arrows.clear();
+                    print_outcome(&brett);
+                    brett = Schach::new();
+                }
             },
         }
-        if brett.active_player == schach::Color::Black {
-            selected_squares.clear();
-            let (a,b,c,d) = brett.best_move(3, SystemTime::now()); 
-            selected_squares.push((a as i32,b as i32)); 
-            selected_squares.push((c as i32,d as i32));
-            brett.move_piece(a, b, c, d);
-            //print_outcome(&brett);
-            
-        } 
-        else if brett.active_player == schach::Color::White {
-            selected_squares.clear();
-            let (a,b,c,d) = brett.best_move(3, SystemTime::now()); 
-            selected_squares.push((a as i32,b as i32));
-            selected_squares.push((c as i32,d as i32));
-            brett.move_piece(a, b, c, d);   
-            //print_outcome(&brett);
-        } 
+
 
         for event in event_pump.poll_iter() {
             match event {
@@ -112,10 +129,9 @@ pub fn main() -> Result<(), String> {
                             if start_pos_right == Some((x / SQUARE_SIZE as i32, y / SQUARE_SIZE as i32)) {
                                 let tmp = (x / SQUARE_SIZE as i32, y / SQUARE_SIZE as i32);
                                 if selected_squares.contains(&tmp) {
-                                    let index: usize = selected_squares.iter().position(|&r| r == tmp).unwrap();
-                                    selected_squares.remove(index);
+                                    selected_squares.remove(&tmp);
                                 } else {
-                                    selected_squares.push((x / SQUARE_SIZE as i32, y / SQUARE_SIZE as i32));
+                                    selected_squares.insert((x / SQUARE_SIZE as i32, y / SQUARE_SIZE as i32));
                                 }
                             } else {
                                 if let Some((start_x, start_y)) = start_pos_right {
@@ -234,7 +250,7 @@ pub fn main() -> Result<(), String> {
         }
         
         canvas.present();
-        //::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
+        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 120));
     }
     Ok(())
 }
