@@ -8,6 +8,7 @@ use sdl2::keyboard::Keycode;
 use sdl2::rect::Rect;
 use sdl2::rect::Point;
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::SystemTime;
 use std::time::Duration;
 use std::thread;
@@ -19,7 +20,7 @@ pub mod lookup_table;
 const SQUARE_SIZE:u32 = 100;
 
 pub fn main() -> Result<(), String> {
-    let lookup_table: lookup_table::LookupTable = lookup_table::LookupTable::new();
+    let lookup_table: Arc<lookup_table::LookupTable> = Arc::new(lookup_table::LookupTable::new());
 
     rayon::ThreadPoolBuilder::new().num_threads(18).build_global().unwrap();
 
@@ -83,9 +84,9 @@ pub fn main() -> Result<(), String> {
                     calulation_running = true;
                     (tx, rx) = std::sync::mpsc::channel();
                     let brett_clone: Schach = brett.clone();
-                    let lookup_table_clone: lookup_table::LookupTable = lookup_table.clone();
+                    let lookup_table_reference = Arc::clone(&lookup_table);
                     thread::spawn(move || {
-                        let (a,b,c,d) = brett_clone.best_move(3, SystemTime::now(), &lookup_table_clone); 
+                        let (a,b,c,d) = brett_clone.best_move(3, SystemTime::now()); 
                         tx.send((a,b,c,d)).unwrap();
                     });
                 }

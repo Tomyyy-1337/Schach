@@ -146,7 +146,7 @@ impl Schach {
     }   
 
 
-    pub fn best_move(&self, depth: u64, start: SystemTime, lookup_table: &lookup_table::LookupTable) -> (u64,u64,u64,u64) {
+    pub fn best_move(&self, depth: u64, start: SystemTime) -> (u64,u64,u64,u64) {
         let mut best = f32::MIN;
         
         let maximizing_player = match self.active_player {
@@ -177,7 +177,7 @@ impl Schach {
         }).collect_into_vec(&mut moves);
         
         if SystemTime::now() < start + Duration::new(0,1_000_000_000/3) && depth < 25 {
-            return self.best_move(depth+1,start, lookup_table);
+            return self.best_move(depth+1,start);
         }
         
         for (eval,a,b,c,d) in moves {
@@ -498,6 +498,30 @@ impl Schach {
             None => HashSet::new(),
         }
     }
+
+    // fn generate_moves_mogic(&self, x: u64, y: u64, tiefe: u8) -> HashSet<(i32, i32)> {
+    //     let all_pieces = self.white_king | self.white_queen | self.white_rooks | self.white_bishops | self.white_knights | self.white_pawns | self.black_king | self.black_queen | self.black_rooks | self.black_bishops | self.black_knights | self.black_pawns;
+    //     let mut rook_moves = self.lookup.get_rook_moves(x + y * 8, all_pieces);
+    //     let friendly_pieces = match self.active_player {
+    //         Color::White => self.white_king | self.white_queen | self.white_rooks | self.white_bishops | self.white_knights | self.white_pawns,
+    //         Color::Black => self.black_king | self.black_queen | self.black_rooks | self.black_bishops | self.black_knights | self.black_pawns,
+    //     };
+    //     rook_moves = rook_moves & !friendly_pieces;
+
+
+    //     let mut result = HashSet::new();
+    //     let mut i: u64 = 0;
+    //     while rook_moves != 0 {
+    //         if rook_moves & 1 == 1 {
+    //             if tiefe == 0 || self.is_valid_move(&self.active_player, x, y, i % 8, i / 8) {
+    //                 result.insert((i as i32 % 8 , i as i32 / 8));
+    //             }
+    //         }
+    //         rook_moves >>= 1;
+    //         i += 1
+    //     }
+    //     result
+    // }
 
     fn generate_moves(&self, c: &Color, x: u64, y:u64 ,range: u8, tiefe: u8, moves: Vec<(i32,i32)>) -> HashSet<(i32, i32)> {
         let mut result = HashSet::new();
