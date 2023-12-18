@@ -164,6 +164,7 @@ version = "0.1.0"
 dependencies = [
  "chess-notation-parser",
  "fastrand",
+ "lazy_static",
  "rand",
  "rayon",
  "sdl2",

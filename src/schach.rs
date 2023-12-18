@@ -6,7 +6,13 @@ use rand::seq::SliceRandom;
 use rand::thread_rng;
 
 use crate::lookup_table;
+use lazy_static::lazy_static;
 // use chess_notation_parser::{self, Turn, CastlingType, Castling};
+
+
+lazy_static! {
+    pub static ref LOOKUP_TABLE: lookup_table::LookupTable = lookup_table::LookupTable::new();
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Color {
@@ -501,7 +507,7 @@ impl Schach {
 
     // fn generate_moves_mogic(&self, x: u64, y: u64, tiefe: u8) -> HashSet<(i32, i32)> {
     //     let all_pieces = self.white_king | self.white_queen | self.white_rooks | self.white_bishops | self.white_knights | self.white_pawns | self.black_king | self.black_queen | self.black_rooks | self.black_bishops | self.black_knights | self.black_pawns;
-    //     let mut rook_moves = self.lookup.get_rook_moves(x + y * 8, all_pieces);
+    //     let mut rook_moves = (&*LOOKUP_TABLE).get_rook_moves(x + y * 8, all_pieces);
     //     let friendly_pieces = match self.active_player {
     //         Color::White => self.white_king | self.white_queen | self.white_rooks | self.white_bishops | self.white_knights | self.white_pawns,
     //         Color::Black => self.black_king | self.black_queen | self.black_rooks | self.black_bishops | self.black_knights | self.black_pawns,

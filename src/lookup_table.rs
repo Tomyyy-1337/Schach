@@ -4,7 +4,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 #[derive(Clone)]
 pub struct LookupTable {
-    rook_move_mask: HashMap<u64, u64>,
+    rook_move_mask: Vec<u64>,
     rook_moves1: Vec<u64>,
     rook_moves2: Vec<u64>,
     rook_moves3: Vec<u64>,
@@ -15,6 +15,7 @@ pub struct LookupTable {
     rook_moves8: Vec<u64>,
     
 }
+
 
 impl LookupTable {
     pub fn new() -> Self {
@@ -48,7 +49,7 @@ impl LookupTable {
             }
         }
 
-        let mut rook_move_mask: HashMap<u64, u64> = HashMap::new();
+        let mut rook_move_mask: Vec<u64> = Vec::new();
         // iterate through all possible rook positions
         for square in 0..64 {
             let mut moves: u64 = 0;
@@ -57,7 +58,7 @@ impl LookupTable {
                     moves |= 1 << target;
                 }
             }
-            rook_move_mask.insert(1 << square, moves);
+            rook_move_mask.push(moves);
         }
         
         let mut rook_moves: HashMap<u64, u64> = HashMap::new();
@@ -66,7 +67,7 @@ impl LookupTable {
         let dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)];
         for x in 0..8 {
             for y in 0..8 {
-                let iterator = BitboardIterator::new(*rook_move_mask.get(&(1 << (x * 8 + y))).unwrap());
+                let iterator = BitboardIterator::new(rook_move_mask[x * 8 + y]);
                 for bitboard in  iterator {   
                     let mut moves: u64 = 0;
                     for dir in dirs.iter() {
@@ -138,7 +139,7 @@ impl LookupTable {
                 _ => panic!("Index out of bounds"),
             }
         }    
-
+        print!("Hai");
         Self {
             rook_move_mask,
             rook_moves1,
@@ -154,7 +155,7 @@ impl LookupTable {
 
     pub fn get_rook_moves(&self, position_map:u64, all_pieces: u64) -> u64 {
         let filter:u64 = 0b00000000_01111110_01111110_01111110_01111110_01111110_01111110_00000000;
-        let relevant_pieces = all_pieces & self.get_rook_move_mask(position_map) & filter;
+        let relevant_pieces = all_pieces & self.get_rook_move_mask(63 - position_map.leading_zeros() as u64) & filter;
         let magic_index = relevant_pieces.count_zeros() % 8;
         let (magic_number, magic_shift) = match magic_index {
             0 => (8458573397933691365u64, 44u64),
@@ -180,6 +181,6 @@ impl LookupTable {
     }
 
     pub fn get_rook_move_mask(&self, square: u64) -> u64 {
-        *self.rook_move_mask.get(&square).unwrap()
+        self.rook_move_mask[63 - square.leading_zeros() as usize]
     }
 }
